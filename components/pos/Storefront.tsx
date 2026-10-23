@@ -1,26 +1,20 @@
 "use client";
 import type { Dispatch, SetStateAction } from "react";
 import {
-  Coffee,
-  ArrowUpRight,
-  Heart,
   Clock,
   MapPin,
   ChevronRight,
   Search,
   X,
-  Flame,
-  Leaf,
-  GlassWater,
   Plus,
+  Coffee,
+  ShoppingBag,
 } from "lucide-react";
 import { Product, variants, basePrice, imageFor } from "@/lib/catalog";
 import { money } from "@/lib/client";
 type Props = {
   config: any;
   table: number;
-  setCartOpen: Dispatch<SetStateAction<boolean>>;
-  setCheckout: Dispatch<SetStateAction<boolean>>;
   query: string;
   setQuery: Dispatch<SetStateAction<string>>;
   category: string;
@@ -28,24 +22,10 @@ type Props = {
   searchResults: Product[];
   openProduct: (p: Product) => void;
   nav: (v: string) => void;
-  setLogin: Dispatch<SetStateAction<boolean>>;
 };
-function IconCategory({ name }: { name: string }) {
-  return name === "กาแฟ" ? (
-    <Coffee size={17} />
-  ) : name === "มัทฉะ" || name === "ชา" ? (
-    <Leaf size={17} />
-  ) : name === "เมนูแนะนำ" ? (
-    <Flame size={17} />
-  ) : (
-    <GlassWater size={17} />
-  );
-}
 export default function Storefront({
   config,
   table,
-  setCartOpen,
-  setCheckout,
   query,
   setQuery,
   category,
@@ -53,87 +33,56 @@ export default function Storefront({
   searchResults,
   openProduct,
   nav,
-  setLogin,
 }: Props) {
   return (
-    <main>
-      <section
-        className="hero"
-        style={{
-          backgroundImage: `linear-gradient(90deg,rgba(24,21,17,.78),rgba(24,21,17,.12)),url(${config.cover})`,
-        }}
-      >
-        <div className="hero-inner">
-          <div className="eyebrow light">
-            <span /> A LITTLE COFFEE. A GOOD DAY.
-          </div>
-          <h1>
-            แก้วโปรดของคุณ
-            <br />
-            ความสุขของเรา<span>.</span>
-          </h1>
-          <p>
-            ค่อย ๆ จิบ แล้วปล่อยให้วันนี้เป็นวันดี ๆ<br />
-            กาแฟหอม ๆ และเครื่องดื่มที่ตั้งใจทำทุกแก้ว
-          </p>
-          <a href="#menu" className="cream-btn">
-            เลือกเครื่องดื่มแก้วโปรด <ArrowUpRight size={18} />
-          </a>
-          <div className="hero-foot">
-            <span>
-              <Coffee size={15} /> FRESHLY MADE, ALWAYS
-            </span>
-            <span>EST. GOOD DAYS</span>
-          </div>
+    <main className="customer-storefront">
+      <div className="customer-cover">
+        <img src={config.cover} alt="ภาพปกร้าน OLD SCHOOL" />
+        <span>COFFEE & GOOD DAYS</span>
+      </div>
+      <section className="restaurant-profile" aria-label="ข้อมูลร้าน">
+        <div className="profile-top">
+          <img className="restaurant-logo" src={config.logo} alt="โลโก้ร้าน" />
+          <span
+            className={"availability " + (!config.accepting ? "is-closed" : "")}
+          >
+            <span />
+            {config.accepting ? "เปิดรับออเดอร์" : "ปิดรับออเดอร์ชั่วคราว"}
+          </span>
         </div>
-        <div className="hero-stamp">
-          BREWED WITH
-          <Heart size={22} />
-          GOOD VIBES
+        <h1>{config.name}</h1>
+        <p className="restaurant-description">กาแฟ • ชา • เครื่องดื่มชงสด</p>
+        <div className="restaurant-hours">
+          <Clock size={14} />
+          <span>
+            เวลาเปิด–ปิด {config.open}–{config.close} น.
+          </span>
+          <span className="order-hint">สั่งแล้วรับที่เคาน์เตอร์</span>
         </div>
       </section>
-      <div className="shop-info">
-        <div className="shop-avatar">
-          <img src={config.logo} alt="โลโก้ร้าน" />
+      <div className="service-location">
+        <MapPin size={19} />
+        <div>
+          <small>กำลังสั่งสำหรับ</small>
+          <strong>
+            {table
+              ? "ทานที่ร้าน · โต๊ะ " + String(table).padStart(2, "0")
+              : "ทานที่ร้าน / รับกลับบ้าน"}
+          </strong>
         </div>
-        <div className="shop-name">
-          <h2>
-            {config.name} <span>COFFEE</span>
-          </h2>
-          <p>
-            <span className={"dot " + (!config.accepting ? "closed" : "")} />
-            {config.accepting ? "พร้อมรับออเดอร์" : "ปิดรับออเดอร์ชั่วคราว"}
-            <i /> <Clock size={13} />
-            {config.open} – {config.close} น.
-          </p>
-        </div>
-        <button
-          className="table-pill"
-          onClick={() => {
-            setCartOpen(true);
-            setCheckout(true);
-          }}
-        >
-          <MapPin size={17} />
+        <span>
           {table
-            ? "โต๊ะ " + String(table).padStart(2, "0")
-            : "เลือกโต๊ะ / กลับบ้าน"}
-          <ChevronRight size={15} />
-        </button>
+            ? "เลือกวิธีรับอีกครั้งก่อนสั่ง"
+            : "เลือกวิธีรับในขั้นตอนยืนยัน"}
+        </span>
       </div>
       <section className="menu-section" id="menu">
-        <div className="menu-heading">
-          <div>
-            <div className="eyebrow">MADE FOR YOUR EVERYDAY</div>
-            <h2>
-              วันนี้ ดื่มอะไรดี<span>?</span>
-            </h2>
-            <p>เลือกแก้วที่ใช่ แล้วให้เราดูแลความอร่อย</p>
-          </div>
+        <div className="customer-menu-tools">
           <label className="search">
             <Search size={18} />
             <input
-              placeholder="ค้นหาเครื่องดื่มที่ชอบ..."
+              aria-label="ค้นหาเมนู"
+              placeholder="ค้นหาเมนูในร้านนี้"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
@@ -144,31 +93,38 @@ export default function Storefront({
             )}
           </label>
         </div>
-        <div className="category-bar">
+        <div className="category-bar" aria-label="หมวดหมู่เมนู">
           {["เมนูแนะนำ", ...config.categories].map((c: string) => (
             <button
               key={c}
+              aria-pressed={category === c}
               className={category === c ? "chosen" : ""}
               onClick={() => {
                 setCategory(c);
                 setQuery("");
+                requestAnimationFrame(() =>
+                  document
+                    .getElementById("menu-results")
+                    ?.scrollIntoView({ behavior: "smooth", block: "start" }),
+                );
               }}
             >
-              <IconCategory name={c} />
               {c}
             </button>
           ))}
         </div>
-        <div className="section-label">
-          <h3>
-            {query
-              ? "ผลการค้นหา"
-              : category === "เมนูแนะนำ"
-                ? "แก้วโปรดที่อยากให้ลอง"
-                : category}
-            <span>{searchResults.length} เมนู</span>
-          </h3>
-          <span className="small-label">GOOD COFFEE, GOOD MOOD.</span>
+        <div className="section-label" id="menu-results">
+          <div>
+            <h2>{query ? "ผลการค้นหา" : category}</h2>
+            <p>
+              {query
+                ? "เมนูที่ตรงกับ “" + query + "”"
+                : category === "เมนูแนะนำ"
+                  ? "เมนูที่อยากให้ลองจาก OLD SCHOOL"
+                  : "เลือกเมนู แล้วปรับความหวานได้ตามชอบ"}
+            </p>
+          </div>
+          <span>{searchResults.length} เมนู</span>
         </div>
         <div className="product-grid">
           {searchResults.map((p) => (
@@ -176,28 +132,23 @@ export default function Storefront({
               className="product-card"
               key={p.id}
               onClick={() => openProduct(p)}
+              aria-label={"เลือก " + p.name}
             >
               <div className="product-image">
                 <img src={imageFor(p)} alt={p.name} loading="lazy" />
-                {p.recommended && (
-                  <span className="recommend">
-                    <Flame size={12} /> เมนูแนะนำ
-                  </span>
-                )}
+                {p.recommended && <span className="recommend">แนะนำ</span>}
                 <span className="image-caption">ภาพประกอบ</span>
-                <span className="add-circle">
-                  <Plus size={21} />
-                </span>
               </div>
               <div className="product-content">
-                <small>{p.en}</small>
                 <h3>{p.name}</h3>
+                <small>{p.en}</small>
                 <div className="product-bottom">
-                  <span className="price">฿{money(basePrice(p))}</span>
-                  <span>
-                    {variants(p)
-                      .map((v) => v.label)
-                      .join(" / ")}
+                  <span className="price">
+                    {variants(p).length > 1 && <small>เริ่ม </small>}฿
+                    {money(basePrice(p))}
+                  </span>
+                  <span className="add-circle" aria-hidden="true">
+                    <Plus size={20} />
                   </span>
                 </div>
               </div>
@@ -206,31 +157,32 @@ export default function Storefront({
         </div>
         {!searchResults.length && (
           <div className="empty">
-            <Search />
-            <h3>ยังไม่พบเครื่องดื่มที่ค้นหา</h3>
-            <p>ลองชื่ออื่น หรือเลือกหมวดหมู่ด้านบน</p>
+            <Search size={32} />
+            <h3>ไม่พบเมนูที่ค้นหา</h3>
+            <p>ลองค้นหาด้วยชื่ออื่น หรือเลือกหมวดหมู่ด้านบน</p>
+            <button
+              className="text-button"
+              onClick={() => {
+                setQuery("");
+                setCategory("เมนูแนะนำ");
+              }}
+            >
+              กลับไปดูเมนูแนะนำ
+            </button>
           </div>
         )}
-        <div className="warm-note">
-          <Coffee size={26} />
-          <div>
-            <strong>ทุกแก้ว ทำด้วยความตั้งใจ</strong>
-            <p>เลือกระดับความหวานที่ชอบ แล้วให้เราชงแก้วโปรดให้คุณ</p>
-          </div>
-          <span>ENJOY YOUR LITTLE MOMENT ↗</span>
+        <div className="customer-menu-note">
+          <Coffee size={17} />
+          <span>ชงสดทุกแก้ว · เลือกความหวานได้ก่อนเพิ่มลงตะกร้า</span>
         </div>
       </section>
-      <footer>
-        <b>OLD SCHOOL</b>
-        <p>Good coffee. Good company. Good days.</p>
-        <div>
-          <button onClick={() => nav("install")}>วิธีเพิ่มลงหน้าจอโฮม</button>
-          <span>•</span>
-          <button onClick={() => setLogin(true)}>เข้าสู่ระบบร้าน</button>
-        </div>
-        <small>
-          รูปเครื่องดื่มเป็นภาพประกอบ • ราคาหน้าร้านรวมตามตัวเลือกที่เลือก
-        </small>
+      <footer className="customer-footer">
+        <img src={config.logo} alt="OLD SCHOOL" />
+        <p>ขอบคุณที่ให้เราเป็นส่วนหนึ่งของวันดี ๆ</p>
+        <small>รูปเครื่องดื่มเป็นภาพประกอบ</small>
+        <button onClick={() => nav("install")}>
+          เพิ่มร้านลงหน้าจอโฮม <ChevronRight size={13} />
+        </button>
       </footer>
     </main>
   );

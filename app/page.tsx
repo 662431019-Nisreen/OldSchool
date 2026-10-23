@@ -345,7 +345,12 @@ export default function App() {
     0,
   );
   return (
-    <>
+    <div
+      className={
+        "app-shell " +
+        (view === "staff" || view === "admin" ? "team-shell" : "customer-shell")
+      }
+    >
       <header className="topbar">
         <a
           className="wordmark"
@@ -357,7 +362,12 @@ export default function App() {
         >
           <img src={config.logo} alt="OLD SCHOOL" />
           <span>
-            OLD SCHOOL<small>COFFEE & GOOD DAYS</small>
+            {config.name}
+            <small>
+              {view === "staff" || view === "admin"
+                ? "สำหรับทีมงานร้าน"
+                : "สั่งเครื่องดื่มออนไลน์"}
+            </small>
           </span>
         </a>
         <nav>
@@ -373,23 +383,28 @@ export default function App() {
           >
             ออเดอร์ของฉัน
           </button>
-          <button
-            className={view === "staff" ? "active" : ""}
-            onClick={() => nav("staff")}
-          >
-            สำหรับพนักงาน
-          </button>
-          {user?.role === "admin" && (
-            <button
-              className={view === "admin" ? "active" : ""}
-              onClick={() => nav("admin")}
-            >
-              จัดการร้าน
-            </button>
+          {(view === "staff" || view === "admin") && (
+            <>
+              <button
+                className={view === "staff" ? "active" : ""}
+                onClick={() => nav("staff")}
+              >
+                สำหรับพนักงาน
+              </button>
+              {user?.role === "admin" && (
+                <button
+                  className={view === "admin" ? "active" : ""}
+                  onClick={() => nav("admin")}
+                >
+                  จัดการร้าน
+                </button>
+              )}
+            </>
           )}
         </nav>
         <button
           className="header-cart"
+          aria-label="เปิดตะกร้า"
           onClick={() => {
             setCartOpen(true);
             setCheckout(false);
@@ -409,8 +424,6 @@ export default function App() {
         <Storefront
           config={config}
           table={table}
-          setCartOpen={setCartOpen}
-          setCheckout={setCheckout}
           query={query}
           setQuery={setQuery}
           category={category}
@@ -418,7 +431,6 @@ export default function App() {
           searchResults={searchResults}
           openProduct={openProduct}
           nav={nav}
-          setLogin={setLogin}
         />
       )}
       {view === "orders" && (
@@ -1589,7 +1601,37 @@ export default function App() {
           <ChevronRight size={18} />
         </button>
       )}
-    </>
+      {view !== "staff" && view !== "admin" && (
+        <nav className="customer-bottom-nav" aria-label="เมนูลูกค้า">
+          <button
+            className={view === "shop" ? "selected" : ""}
+            onClick={() => nav("shop")}
+          >
+            <Coffee size={21} />
+            <span>เมนู</span>
+          </button>
+          <button
+            className={view === "orders" ? "selected" : ""}
+            onClick={() => nav("orders")}
+          >
+            <ReceiptText size={21} />
+            <span>ออเดอร์ของฉัน</span>
+          </button>
+          <button
+            onClick={() => {
+              setCartOpen(true);
+              setCheckout(false);
+            }}
+          >
+            <span className="bottom-cart-icon">
+              <ShoppingBag size={21} />
+              {count > 0 && <b>{count}</b>}
+            </span>
+            <span>ตะกร้า</span>
+          </button>
+        </nav>
+      )}
+    </div>
   );
   function orderCard(o: any) {
     return (
