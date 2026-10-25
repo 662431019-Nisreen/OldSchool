@@ -80,7 +80,7 @@ export default function SalesReport() {
     mode === "all"
       ? "ทั้งหมด"
       : mode === "day"
-        ? (date === bangkokDay() ? "วันนี้ · " : "") + date
+        ? date
         : mode === "month"
           ? month
           : start + " ถึง " + end;
@@ -119,14 +119,6 @@ export default function SalesReport() {
               {label}
             </button>
           ))}
-          <button
-            onClick={() => {
-              setDate(bangkokDay());
-              setMode("day");
-            }}
-          >
-            วันนี้
-          </button>
         </div>
         <div className="report-date-fields">
           {mode === "day" && (
