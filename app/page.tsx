@@ -4,6 +4,7 @@ import { api, money, statusNames } from "@/lib/client";
 import Storefront from "@/components/pos/Storefront";
 import CartItem from "@/components/pos/CartItem";
 import ProductDialog from "@/components/pos/ProductDialog";
+import OrderEditor from "@/components/pos/OrderEditor";
 import TableQr from "@/components/pos/TableQr";
 import {
   Coffee,
@@ -98,6 +99,7 @@ export default function App() {
     [idem, setIdem] = useState(""),
     [setup, setSetup] = useState(false),
     [editingLine, setEditingLine] = useState<string | null>(null);
+  const [orderEditor, setOrderEditor] = useState<any>(null);
   const notify = (s: string) => {
     setToast(s);
     setTimeout(() => setToast(""), 4000);
@@ -475,6 +477,19 @@ export default function App() {
           nav={nav}
         />
       )}
+      {orderEditor && user && (
+        <OrderEditor
+          order={orderEditor.order}
+          config={config}
+          user={user}
+          onClose={() => setOrderEditor(null)}
+          onSaved={async () => {
+            const d = await api("orders");
+            setOrders(d.orders);
+            notify("บันทึกออเดอร์เรียบร้อย");
+          }}
+        />
+      )}
       {view === "orders" && (
         <main className="workspace narrow">
           <div className="eyebrow">YOUR LITTLE COFFEE MOMENT</div>
@@ -548,6 +563,14 @@ export default function App() {
                     <span>฿{i.price * i.qty}</span>
                   </div>
                 ))}
+                {!!o.adjustment && (
+                  <div className="row">
+                    <span>{o.adjustment < 0 ? "ส่วนลด" : "เพิ่มราคา"}</span>
+                    <span>
+                      {o.adjustment > 0 ? "+" : ""}฿{money(o.adjustment)}
+                    </span>
+                  </div>
+                )}
                 <div className="row total">
                   <b>รวมทั้งหมด</b>
                   <b>฿{money(o.total)}</b>
@@ -674,6 +697,17 @@ export default function App() {
           </div>
           {adminTab === "orders" || adminTab === "history" ? (
             <>
+              <div className="counter-order-toolbar">
+                <button
+                  className="primary"
+                  onClick={() => setOrderEditor({ order: null })}
+                >
+                  <Plus size={18} /> เพิ่มออเดอร์หน้าร้าน
+                </button>
+                <span className="muted">
+                  ลูกค้าสั่งที่เคาน์เตอร์ รับรายการได้ที่นี่
+                </span>
+              </div>
               {adminTab === "orders" ? (
                 <div className="kanban">
                   {["waiting", "making", "ready"].map((s) => (
@@ -1742,6 +1776,9 @@ export default function App() {
           <h3>{o.number}</h3>
           <span className={"status " + o.status}>{statusNames[o.status]}</span>
         </div>
+        {o.source === "counter" && (
+          <small className="counter-order-label">สั่งหน้าร้าน</small>
+        )}
         <p className="muted">
           {o.type === "dinein" ? "โต๊ะ " + o.table : "กลับบ้าน"} ·{" "}
           {new Date(o.created).toLocaleTimeString("th-TH", {
@@ -1774,7 +1811,52 @@ export default function App() {
                   : "รอชำระที่เคาน์เตอร์"}
           </span>
         </div>
+        {o.adjustment ? (
+          <p className="order-adjustment">
+            ปรับยอด {o.adjustment > 0 ? "+" : ""}
+            {money(o.adjustment)} บาท · {o.adjustmentReason}
+          </p>
+        ) : null}
+        {o.revisions?.length > 0 && (
+          <details className="order-revisions">
+            <summary>ประวัติแก้ไข ({o.revisions.length})</summary>
+            {o.revisions.map((r: any, index: number) => (
+              <div key={index}>
+                <b>{r.actor}</b> · {new Date(r.at).toLocaleString("th-TH")}
+                <p>
+                  {r.reason} · ฿{money(r.before.total)} → ฿
+                  {money(r.after.total)}
+                </p>
+                {r.settlement && (
+                  <p>
+                    {r.delta < 0 ? "บันทึกคืนเงิน" : "บันทึกรับเพิ่ม"} ฿
+                    {money(Math.abs(r.delta))} ·{" "}
+                    {r.settlement.method === "cash"
+                      ? "เงินสด"
+                      : "QR / โอนธนาคาร"}
+                  </p>
+                )}
+                <small>
+                  {r.after.items
+                    .map(
+                      (i: any) =>
+                        `${i.qty} × ${i.name} (${i.variantLabel}${i.sweet != null ? ` หวาน ${i.sweet}%` : ""})`,
+                    )
+                    .join(", ")}
+                </small>
+              </div>
+            ))}
+          </details>
+        )}
         <div className="staff-actions">
+          {(o.payment !== "paid" || user?.role === "admin") && (
+            <button
+              disabled={busy}
+              onClick={() => setOrderEditor({ order: o })}
+            >
+              {o.payment === "paid" ? "แก้ยอด / บันทึกคืนเงิน" : "แก้ไขออเดอร์"}
+            </button>
+          )}
           {o.payment !== "paid" &&
             ["cash", "qr"].map((method) => (
               <button

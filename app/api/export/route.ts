@@ -34,6 +34,11 @@ export async function GET(r: Request) {
     ประเภท: o.type === "dinein" ? "ทานที่ร้าน" : "กลับบ้าน",
     โต๊ะ: o.table || "",
     ยอดรวม: o.total,
+    ยอดก่อนปรับ: o.items.reduce((s: number, i: any) => s + i.price * i.qty, 0),
+    ปรับยอด: o.adjustment || 0,
+    เหตุผลปรับยอด: o.adjustmentReason || "",
+    ช่องทางสั่ง: o.source === "counter" ? "หน้าร้าน" : "QR",
+    จำนวนครั้งที่แก้ไข: o.revisions?.length || 0,
     สถานะ: names[o.status],
     ชำระเงิน: o.payment === "paid" ? "ชำระแล้ว" : "ยังไม่ชำระ",
     จำนวนแก้ว: o.items.reduce(
@@ -47,6 +52,30 @@ export async function GET(r: Request) {
   }));
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "Orders");
+  const revisions = orders.flatMap((o) =>
+    (o.revisions || []).map((r: any) => ({
+      ออเดอร์: o.number,
+      เวลา: r.at,
+      ผู้แก้ไข: r.actor,
+      เหตุผล: r.reason,
+      ยอดเดิม: r.before.total,
+      ยอดใหม่: r.after.total,
+      ส่วนต่าง: r.delta,
+      การชำระส่วนต่าง: r.settlement
+        ? r.delta < 0
+          ? "คืนเงิน"
+          : "รับเพิ่ม"
+        : "ยังไม่ชำระ / ยอดเท่าเดิม",
+      วิธี: r.settlement?.method || "",
+      รายการก่อนแก้: JSON.stringify(r.before.items),
+      รายการหลังแก้: JSON.stringify(r.after.items),
+    })),
+  );
+  XLSX.utils.book_append_sheet(
+    wb,
+    XLSX.utils.json_to_sheet(revisions),
+    "Revisions",
+  );
   const data = XLSX.write(wb, { type: "array", bookType: "xlsx" });
   return new Response(data, {
     headers: {

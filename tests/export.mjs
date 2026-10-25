@@ -24,6 +24,10 @@ const buf = Buffer.from(await response.arrayBuffer());
 const book = XLSX.read(buf, { type: "buffer" });
 const rows = XLSX.utils.sheet_to_json(book.Sheets.Orders);
 assert.ok(rows.length > 0);
+assert.ok(book.Sheets.Revisions);
+const revisions = XLSX.utils.sheet_to_json(book.Sheets.Revisions);
+assert.ok(revisions.some((r) => r["ส่วนต่าง"] < 0));
+assert.ok(rows.some((r) => r["ช่องทางสั่ง"] === "หน้าร้าน"));
 assert.equal(rows[0]["ออเดอร์"].startsWith("OS-"), true);
 console.log(
   "PASS: Excel endpoint enforces admin auth and returns valid XLSX with Thai order rows.",

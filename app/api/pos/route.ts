@@ -220,6 +220,190 @@ export async function POST(r: Request) {
       return json({ ok: true });
     }
     if (!u) return json({ error: "กรุณาเข้าสู่ระบบ" }, 401);
+    if (b.action === "counter-order" || b.action === "edit-order") {
+      if (!["admin", "staff"].includes(u.role))
+        return json({ error: "ไม่มีสิทธิ์" }, 403);
+      const editing = b.action === "edit-order";
+      const old = editing
+        ? await db
+            .prepare("SELECT * FROM orders WHERE id=?")
+            .bind(b.id)
+            .first<any>()
+        : null;
+      if (editing && !old) return json({ error: "ไม่พบออเดอร์" }, 404);
+      if (old && old.version !== b.version)
+        return json({ error: "ออเดอร์ถูกแก้ไขแล้ว กรุณาปิดแล้วเปิดใหม่" }, 409);
+      if (old?.payment === "paid" && u.role !== "admin")
+        return json({ error: "เฉพาะเจ้าของร้านแก้ยอดที่ชำระแล้วได้" }, 403);
+      if (old?.status === "done" && old.payment !== "paid")
+        return json({ error: "ออเดอร์นี้ปิดแล้ว" }, 409);
+      const owner = "counter:" + u.id;
+      if (!editing) {
+        if (typeof b.idem !== "string" || !/^[-a-zA-Z0-9]{20,80}$/.test(b.idem))
+          return json({ error: "รหัสคำสั่งไม่ถูกต้อง" }, 400);
+        const existing = await db
+          .prepare("SELECT * FROM orders WHERE idem=? AND owner=?")
+          .bind(b.idem, owner)
+          .first();
+        if (existing) return json({ order: unpack(existing) });
+      }
+      const c = await getConfig();
+      if (
+        !["dinein", "takeaway"].includes(b.type) ||
+        (b.type === "dinein" &&
+          (!Number.isInteger(b.table) || b.table < 1 || b.table > c.tables))
+      )
+        return json({ error: "กรุณาเลือกโต๊ะที่ถูกต้อง" }, 400);
+      if (!Array.isArray(b.items) || !b.items.length || b.items.length > 60)
+        return json({ error: "กรุณาเพิ่มรายการสินค้า" }, 400);
+      const previous = old ? JSON.parse(old.payload) : null;
+      // Retained lines keep the price/options sold at the time, even if the menu later changes.
+      // Only a server-owned snapshot index can retain a price; new or changed options use today's catalog.
+      const items = b.items.map((line: any) => {
+        const original = Number.isInteger(line.originalIndex)
+          ? previous?.items[line.originalIndex]
+          : null;
+        if (
+          original &&
+          original.productId === line.productId &&
+          original.variant === line.variant &&
+          original.sweet === line.sweet
+        ) {
+          if (!Number.isInteger(line.qty) || line.qty < 1 || line.qty > 30)
+            throw new Error("จำนวนสินค้าไม่ถูกต้อง");
+          if (line.qty > original.qty) validateCart([line], c.products);
+          return {
+            ...original,
+            qty: line.qty,
+            note: String(line.note || "").slice(0, 200),
+          };
+        }
+        return validateCart([line], c.products)[0];
+      });
+      const retained = b.items
+        .filter((i: any) => Number.isInteger(i.originalIndex))
+        .map((i: any) => i.originalIndex);
+      if (new Set(retained).size !== retained.length)
+        return json({ error: "รายการซ้ำ กรุณาเปิดออเดอร์ใหม่" }, 400);
+      const subtotal = items.reduce(
+        (s: number, i: any) => s + i.price * i.qty,
+        0,
+      );
+      const adjustment = b.adjustment ?? 0;
+      const reason = String(b.reason || "")
+        .trim()
+        .slice(0, 200);
+      if (
+        !Number.isInteger(adjustment) ||
+        Math.abs(adjustment) > 100000 ||
+        subtotal + adjustment < 0 ||
+        ((editing || adjustment !== 0) && !reason)
+      )
+        return json({ error: "ตรวจสอบยอดปรับราคาและระบุเหตุผล" }, 400);
+      if (adjustment !== (previous?.adjustment || 0) && u.role !== "admin")
+        return json({ error: "เฉพาะเจ้าของร้านปรับราคาได้" }, 403);
+      const total = subtotal + adjustment;
+      const delta = old ? total - old.total : 0;
+      if (
+        old?.payment === "paid" &&
+        delta !== 0 &&
+        !["cash", "qr"].includes(b.settlementMethod)
+      )
+        return json(
+          { error: "ระบุวิธีรับเงินเพิ่มหรือคืนเงินที่ดำเนินการแล้ว" },
+          400,
+        );
+      const now = new Date().toISOString();
+      const revisions = previous?.revisions || [];
+      if (revisions.length >= 100)
+        return json(
+          { error: "ออเดอร์นี้มีประวัติแก้ไขครบ 100 ครั้งแล้ว" },
+          409,
+        );
+      const revision = old
+        ? {
+            at: now,
+            actor: u.name,
+            actorId: u.id,
+            reason,
+            before: {
+              items: previous.items,
+              total: old.total,
+              type: previous.type,
+              table: previous.table,
+              adjustment: previous.adjustment || 0,
+            },
+            after: {
+              items,
+              total,
+              type: b.type,
+              table: b.type === "dinein" ? b.table : null,
+              adjustment,
+            },
+            delta,
+            settlement:
+              old.payment === "paid" && delta !== 0
+                ? { method: b.settlementMethod, amount: delta }
+                : null,
+          }
+        : null;
+      const payload = {
+        ...(previous || {}),
+        items,
+        type: b.type,
+        table: b.type === "dinein" ? b.table : null,
+        method: previous?.method || "counter",
+        source: previous?.source || (editing ? "qr" : "counter"),
+        subtotal,
+        adjustment,
+        adjustmentReason: adjustment
+          ? adjustment === previous?.adjustment
+            ? previous?.adjustmentReason
+            : reason
+          : "",
+        revisions: revision ? [...revisions, revision] : [],
+        ...(editing ? {} : { createdBy: u.name }),
+      };
+      if (editing) {
+        const changed = await db
+          .prepare(
+            "UPDATE orders SET payload=?,total=?,version=version+1 WHERE id=? AND version=? AND payment=?",
+          )
+          .bind(JSON.stringify(payload), total, old.id, b.version, old.payment)
+          .run();
+        if (!changed.meta.changes)
+          return json(
+            { error: "ออเดอร์ถูกแก้ไขแล้ว กรุณาปิดแล้วเปิดใหม่" },
+            409,
+          );
+      } else {
+        await db
+          .prepare(
+            "INSERT OR IGNORE INTO orders(token,owner,idem,payload,total,created) VALUES(?,?,?,?,?,?)",
+          )
+          .bind(
+            crypto.randomUUID(),
+            owner,
+            b.idem,
+            JSON.stringify(payload),
+            total,
+            now,
+          )
+          .run();
+      }
+      await log(u.id, b.action, editing ? String(old.id) : b.idem);
+      const saved = editing
+        ? await db
+            .prepare("SELECT * FROM orders WHERE id=?")
+            .bind(old.id)
+            .first()
+        : await db
+            .prepare("SELECT * FROM orders WHERE idem=? AND owner=?")
+            .bind(b.idem, owner)
+            .first();
+      if (!saved) return json({ error: "บันทึกไม่สำเร็จ" }, 409);
+      return json({ order: unpack(saved) });
+    }
     if (b.action === "status" || b.action === "payment") {
       const o = await db
         .prepare("SELECT * FROM orders WHERE id=?")
