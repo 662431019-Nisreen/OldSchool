@@ -4,6 +4,7 @@ import { api, money, statusNames } from "@/lib/client";
 import Storefront from "@/components/pos/Storefront";
 import CartItem from "@/components/pos/CartItem";
 import ProductDialog from "@/components/pos/ProductDialog";
+import SalesReport from "@/components/pos/SalesReport";
 import OrderEditor from "@/components/pos/OrderEditor";
 import TableQr from "@/components/pos/TableQr";
 import {
@@ -94,8 +95,6 @@ export default function App() {
     [adminTab, setAdminTab] = useState("orders"),
     [editing, setEditing] = useState<any>(null),
     [users, setUsers] = useState<any[]>([]),
-    [reportDate, setReportDate] = useState(""),
-    [reportMonth, setReportMonth] = useState(""),
     [idem, setIdem] = useState(""),
     [setup, setSetup] = useState(false),
     [editingLine, setEditingLine] = useState<string | null>(null);
@@ -361,28 +360,6 @@ export default function App() {
     setQuery("");
     window.scrollTo(0, 0);
   };
-  const filteredOrders = orders.filter(
-    (o) =>
-      (!reportDate ||
-        new Date(o.created).toLocaleDateString("en-CA", {
-          timeZone: "Asia/Bangkok",
-        }) === reportDate) &&
-      (!reportMonth ||
-        new Date(o.created)
-          .toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" })
-          .startsWith(reportMonth)),
-  );
-  const paid = filteredOrders.filter((o) => o.payment === "paid");
-  const sales = paid.reduce((s, o) => s + o.total, 0);
-  const cups = paid.reduce(
-    (s, o) =>
-      s +
-      o.items.reduce(
-        (n: number, i: any) => n + (i.unit === "piece" ? 0 : i.qty),
-        0,
-      ),
-    0,
-  );
   return (
     <div
       className={
@@ -669,10 +646,9 @@ export default function App() {
                 ...(user.role === "admin"
                   ? [
                       ["products", "เมนูสินค้า"],
-                      ["dashboard", "ยอดขาย"],
+                      ["dashboard", "ยอดขายและรายงาน"],
                       ["categories", "หมวดหมู่"],
                       ["tables", "โต๊ะ / QR"],
-                      ["reports", "รายงาน"],
                       ["users", "พนักงาน"],
                       ["settings", "ตั้งค่าร้าน"],
                     ]
@@ -736,107 +712,7 @@ export default function App() {
             </>
           ) : user.role === "admin" ? (
             <>
-              {(adminTab === "dashboard" || adminTab === "reports") && (
-                <>
-                  <div className="row filters">
-                    <h2>
-                      {adminTab === "dashboard"
-                        ? "ภาพรวมยอดขาย"
-                        : "รายงานยอดขาย"}
-                    </h2>
-                    <div>
-                      <label>
-                        รายวัน{" "}
-                        <input
-                          type="date"
-                          value={reportDate}
-                          onChange={(e) => {
-                            setReportDate(e.target.value);
-                            setReportMonth("");
-                          }}
-                        />
-                      </label>
-                      <label>
-                        รายเดือน{" "}
-                        <input
-                          type="month"
-                          value={reportMonth}
-                          onChange={(e) => {
-                            setReportMonth(e.target.value);
-                            setReportDate("");
-                          }}
-                        />
-                      </label>
-                      <button
-                        onClick={() => {
-                          setReportDate("");
-                          setReportMonth("");
-                        }}
-                      >
-                        ทั้งหมด
-                      </button>
-                    </div>
-                  </div>
-                  <div className="stats">
-                    {[
-                      [money(sales) + " ฿", "ยอดรับชำระแล้ว"],
-                      [filteredOrders.length, "จำนวนออเดอร์"],
-                      [cups, "จำนวนแก้วที่ชำระแล้ว"],
-                      [
-                        orders.filter((o) => o.status !== "done").length,
-                        "ออเดอร์ที่กำลังดูแล",
-                      ],
-                    ].map(([v, l]) => (
-                      <div className="panel" key={l}>
-                        <small>{l}</small>
-                        <h2>{v}</h2>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="panel">
-                    <div className="row">
-                      <h3>ยอดขายแยกหมวดหมู่</h3>
-                      <button className="secondary" onClick={exportExcel}>
-                        <Download size={16} /> ส่งออก Excel
-                      </button>
-                    </div>
-                    {config.categories.map((c: string) => {
-                      const amount = paid.reduce(
-                        (s, o) =>
-                          s +
-                          o.items
-                            .filter((i: any) => i.category === c)
-                            .reduce(
-                              (n: number, i: any) => n + i.price * i.qty,
-                              0,
-                            ),
-                        0,
-                      );
-                      return (
-                        <div className="sales-row" key={c}>
-                          <b>{c}</b>
-                          <div>
-                            <span
-                              style={{
-                                width:
-                                  Math.max(
-                                    1,
-                                    (amount / Math.max(sales, 1)) * 100,
-                                  ) + "%",
-                              }}
-                            />
-                          </div>
-                          <strong>฿{money(amount)}</strong>
-                        </div>
-                      );
-                    })}
-                    <p className="muted">
-                      ยอดขายนับเฉพาะออเดอร์ที่ยืนยันชำระเงิน •
-                      เวลาที่แสดงเป็นเวลาประเทศไทย
-                    </p>
-                  </div>
-                </>
-              )}
+              {adminTab === "dashboard" && <SalesReport />}
               {adminTab === "products" && (
                 <>
                   <div className="row">
@@ -1933,10 +1809,5 @@ export default function App() {
       notify(e.message);
       return null;
     }
-  }
-  function exportExcel() {
-    window.location.href =
-      "/api/export?" +
-      new URLSearchParams({ date: reportDate, month: reportMonth }).toString();
   }
 }

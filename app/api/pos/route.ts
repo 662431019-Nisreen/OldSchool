@@ -9,6 +9,8 @@ import {
   log,
 } from "@/lib/server";
 import { env } from "cloudflare:workers";
+import { reportOrders } from "@/lib/report-server";
+import { summarizeSales } from "@/lib/reports";
 const json = (data: any, status = 200, headers: Record<string, string> = {}) =>
   Response.json(data, {
     status,
@@ -56,6 +58,15 @@ export async function GET(r: Request) {
         .bind(cookie(r, "os_guest") || "")
         .all();
       return json({ orders: rows.results.map(unpack) });
+    }
+    if (action === "report") {
+      if (u?.role !== "admin") return json({ error: "เฉพาะผู้ดูแลระบบ" }, 403);
+      try {
+        const result = await reportOrders(url.searchParams);
+        return json({ ...result, summary: summarizeSales(result.orders) });
+      } catch (e: any) {
+        return json({ error: e.message }, 400);
+      }
     }
     if (action === "admin") {
       if (u?.role !== "admin") return json({ error: "ไม่มีสิทธิ์" }, 403);

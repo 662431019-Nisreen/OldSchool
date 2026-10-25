@@ -3228,3 +3228,173 @@ td button,
   border-radius: 5px;
   margin: 4px 0;
 }
+
+.sales-report {
+  margin-top: 24px;
+}
+.report-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+.report-heading h2 {
+  font-size: 26px;
+  margin: 5px 0;
+}
+.report-heading p {
+  font-size: 13px;
+}
+.report-filter {
+  margin-bottom: 20px;
+}
+.report-presets {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.report-presets button {
+  padding: 9px 16px;
+}
+.report-presets .chosen {
+  background: #6f5032;
+  color: #fff;
+  border-color: #6f5032;
+}
+.report-date-fields {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+.report-date-fields label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+}
+.report-date-fields input {
+  padding: 10px;
+  border: 1px solid #ded6cb;
+  border-radius: 8px;
+  font: inherit;
+  background: white;
+  color: #332b24;
+}
+.report-basis {
+  font-size: 12px;
+  color: #7f776e;
+  margin: 12px 0 18px;
+}
+.report-filter .report-basis {
+  margin-bottom: 0;
+}
+.report-payments {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 14px;
+}
+.report-payments small {
+  color: #7c746b;
+}
+.report-payments h3 {
+  font-size: 24px;
+  margin-top: 8px;
+}
+.report-reconcile {
+  border-top: 1px solid #e8e1d8;
+  margin-top: 20px;
+  padding-top: 12px;
+}
+.report-reconcile .row {
+  padding: 7px 0;
+}
+.report-order-panel {
+  margin-top: 20px;
+}
+.report-table-wrap {
+  overflow-x: auto;
+  margin-top: 16px;
+}
+.report-table-wrap table {
+  width: 100%;
+  min-width: 720px;
+  font-size: 13px;
+}
+.report-table-wrap td {
+  vertical-align: top;
+}
+.report-table-wrap td small {
+  display: block;
+  color: #80766c;
+  margin: 6px 0;
+}
+.report-table-wrap summary {
+  cursor: pointer;
+  color: #70502e;
+}
+.report-items {
+  max-width: 360px;
+  min-width: 190px;
+  font-size: 12px;
+}
+.report-items p {
+  margin: 6px 0;
+}
+.report-revision {
+  border-top: 1px solid #e3dcd1;
+  margin-top: 10px;
+  padding-top: 10px;
+}
+.report-pagination {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+  font-size: 13px;
+}
+.report-empty {
+  padding: 36px;
+  text-align: center;
+  color: #857a6d;
+}
+.report-stats .panel h2 {
+  overflow-wrap: anywhere;
+}
+@media (max-width: 600px) {
+  .report-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .report-heading h2 {
+    font-size: 23px;
+  }
+  .report-heading > .primary {
+    width: 100%;
+    justify-content: center;
+  }
+  .report-date-fields {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+  .report-date-fields input {
+    width: 100%;
+    min-width: 0;
+  }
+  .report-payments {
+    grid-template-columns: 1fr 1fr;
+  }
+  .report-payments .panel {
+    padding: 14px;
+  }
+  .report-payments h3 {
+    font-size: 21px;
+  }
+  .report-order-panel > .row {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+}

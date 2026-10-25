@@ -1,31 +1,23 @@
-import { DB, user, unpack } from "@/lib/server";
+import { user } from "@/lib/server";
+import { reportOrders } from "@/lib/report-server";
+import { paymentSplit, summarizeSales } from "@/lib/reports";
 import * as XLSX from "xlsx";
 export async function GET(r: Request) {
   if ((await user(r))?.role !== "admin")
     return Response.json({ error: "เฉพาะผู้ดูแลระบบ" }, { status: 403 });
   const params = new URL(r.url).searchParams;
-  const date = params.get("date") || "",
-    month = params.get("month") || "";
-  if (
-    (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) ||
-    (month && !/^\d{4}-\d{2}$/.test(month))
-  )
-    return Response.json({ error: "วันที่ไม่ถูกต้อง" }, { status: 400 });
-  const result = await DB()
-    .prepare("SELECT * FROM orders ORDER BY id DESC LIMIT 10000")
-    .all();
+  let orders: any[], range: any;
+  try {
+    ({ orders, range } = await reportOrders(params));
+  } catch (e: any) {
+    return Response.json({ error: e.message }, { status: 400 });
+  }
   const names: Record<string, string> = {
     waiting: "รอทำ",
     making: "กำลังทำ",
     ready: "พร้อมรับ",
     done: "เสร็จสิ้น",
   };
-  const orders = result.results.map(unpack).filter((o) => {
-    const day = new Date(o.created).toLocaleDateString("en-CA", {
-      timeZone: "Asia/Bangkok",
-    });
-    return (!date || day === date) && (!month || day.startsWith(month));
-  });
   const rows = orders.map((o) => ({
     ออเดอร์: o.number,
     วันที่: new Date(o.created).toLocaleString("th-TH", {
@@ -48,6 +40,9 @@ export async function GET(r: Request) {
           : o.method === "qr"
             ? "โอน"
             : "ไม่ระบุวิธีชำระ",
+    เงินสดสุทธิ: paymentSplit(o).cash,
+    โอนสุทธิ: paymentSplit(o).qr,
+    ไม่ระบุวิธีชำระสุทธิ: paymentSplit(o).unknown,
     สถานะชำระเงิน: o.payment === "paid" ? "ชำระแล้ว" : "ยังไม่ชำระ",
     จำนวนแก้ว: o.items.reduce(
       (s: number, i: any) => s + (i.unit === "piece" ? 0 : i.qty),
@@ -88,6 +83,27 @@ export async function GET(r: Request) {
     wb,
     XLSX.utils.json_to_sheet(revisions),
     "Revisions",
+  );
+  const summary = summarizeSales(orders);
+  XLSX.utils.book_append_sheet(
+    wb,
+    XLSX.utils.json_to_sheet([
+      {
+        เริ่มวันที่: range.from || "ทั้งหมด",
+        ถึงวันที่: range.to || "ทั้งหมด",
+        ยอดรับชำระสุทธิ: summary.sales,
+        เงินสดสุทธิ: summary.cash,
+        โอนสุทธิ: summary.qr,
+        ไม่ระบุวิธีชำระ: summary.unknown,
+        ยอดรอชำระ: summary.pending,
+        จำนวนออเดอร์: summary.count,
+        ออเดอร์ชำระแล้ว: summary.paidOrders,
+        จำนวนแก้วชำระแล้ว: summary.cups,
+        จำนวนชิ้นชำระแล้ว: summary.pieces,
+        ปรับยอด: summary.adjustment,
+      },
+    ]),
+    "Summary",
   );
   const data = XLSX.write(wb, { type: "array", bookType: "xlsx" });
   return new Response(data, {
