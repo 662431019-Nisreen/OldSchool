@@ -29,6 +29,34 @@ const revisions = XLSX.utils.sheet_to_json(book.Sheets.Revisions);
 assert.ok(revisions.some((r) => r["ส่วนต่าง"] < 0));
 assert.ok(rows.some((r) => r["ช่องทางสั่ง"] === "หน้าร้าน"));
 assert.equal(rows[0]["ออเดอร์"].startsWith("OS-"), true);
+const source = await fetch(base + "/api/pos?action=orders", {
+  headers: { Cookie: cookie },
+});
+const { orders } = await source.json();
+assert.ok(orders.some((o) => o.payment === "paid" && o.method === "cash"));
+assert.ok(orders.some((o) => o.payment === "paid" && o.method === "qr"));
+assert.ok(orders.some((o) => o.payment !== "paid"));
+for (const o of orders) {
+  const row = rows.find((r) => r["ออเดอร์"] === o.number);
+  assert.ok(row);
+  assert.equal(
+    row["ชำระเงิน"],
+    o.payment !== "paid"
+      ? "ยังไม่ชำระ"
+      : o.method === "cash"
+        ? "เงินสด"
+        : o.method === "qr"
+          ? "โอน"
+          : "ไม่ระบุวิธีชำระ",
+  );
+  assert.equal(
+    row["สถานะชำระเงิน"],
+    o.payment === "paid" ? "ชำระแล้ว" : "ยังไม่ชำระ",
+  );
+}
+assert.ok(revisions.some((r) => r["วิธี"] === "เงินสด"));
+assert.ok(revisions.some((r) => r["วิธี"] === "โอน"));
+
 console.log(
-  "PASS: Excel endpoint enforces admin auth and returns valid XLSX with Thai order rows.",
+  "PASS: Excel auth; valid XLSX; cash/transfer/unpaid labels match actual order payments; Thai correction payment methods.",
 );

@@ -40,7 +40,15 @@ export async function GET(r: Request) {
     ช่องทางสั่ง: o.source === "counter" ? "หน้าร้าน" : "QR",
     จำนวนครั้งที่แก้ไข: o.revisions?.length || 0,
     สถานะ: names[o.status],
-    ชำระเงิน: o.payment === "paid" ? "ชำระแล้ว" : "ยังไม่ชำระ",
+    ชำระเงิน:
+      o.payment !== "paid"
+        ? "ยังไม่ชำระ"
+        : o.method === "cash"
+          ? "เงินสด"
+          : o.method === "qr"
+            ? "โอน"
+            : "ไม่ระบุวิธีชำระ",
+    สถานะชำระเงิน: o.payment === "paid" ? "ชำระแล้ว" : "ยังไม่ชำระ",
     จำนวนแก้ว: o.items.reduce(
       (s: number, i: any) => s + (i.unit === "piece" ? 0 : i.qty),
       0,
@@ -66,7 +74,12 @@ export async function GET(r: Request) {
           ? "คืนเงิน"
           : "รับเพิ่ม"
         : "ยังไม่ชำระ / ยอดเท่าเดิม",
-      วิธี: r.settlement?.method || "",
+      วิธี:
+        r.settlement?.method === "cash"
+          ? "เงินสด"
+          : r.settlement?.method === "qr"
+            ? "โอน"
+            : "",
       รายการก่อนแก้: JSON.stringify(r.before.items),
       รายการหลังแก้: JSON.stringify(r.after.items),
     })),

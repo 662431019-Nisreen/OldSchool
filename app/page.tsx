@@ -705,7 +705,9 @@ export default function App() {
                   <Plus size={18} /> เพิ่มออเดอร์หน้าร้าน
                 </button>
                 <span className="muted">
-                  ลูกค้าสั่งที่เคาน์เตอร์ รับรายการได้ที่นี่
+                  {adminTab === "orders"
+                    ? "เรียงคิวเก่า → ใหม่ จากบนลงล่างในแต่ละสถานะ"
+                    : "ประวัติเรียงออเดอร์ใหม่ → เก่า"}
                 </span>
               </div>
               {adminTab === "orders" ? (
@@ -718,6 +720,7 @@ export default function App() {
                       </h3>
                       {orders
                         .filter((o) => o.status === s)
+                        .sort((a, b) => a.id - b.id)
                         .map((o) => orderCard(o))}
                       {!orders.some((o) => o.status === s) && (
                         <p className="kanban-empty">ยังไม่มีออเดอร์</p>
