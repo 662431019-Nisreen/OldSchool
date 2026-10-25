@@ -172,24 +172,14 @@ export default function App() {
         .catch((e) => notify(e.message));
   }, [view, user]);
   const products: Product[] = config.products;
-  const visible = products.filter(
+  const searchResults = products.filter(
     (p) =>
       !p.hidden &&
-      (category === "เมนูแนะนำ" ? p.recommended : p.category === category) &&
-      (!query ||
+      (!query.trim() ||
         [p.name, p.en].some((n) =>
-          n.toLowerCase().includes(query.toLowerCase()),
+          n.toLowerCase().includes(query.trim().toLowerCase()),
         )),
   );
-  const searchResults = query
-    ? products.filter(
-        (p) =>
-          !p.hidden &&
-          [p.name, p.en].some((n) =>
-            n.toLowerCase().includes(query.toLowerCase()),
-          ),
-      )
-    : visible;
   const total = cart.reduce((s, l) => s + l.price * l.qty, 0),
     count = cart.reduce((s, l) => s + l.qty, 0);
   const openProduct = (p: Product) => {
@@ -423,7 +413,6 @@ export default function App() {
       {view === "shop" && (
         <Storefront
           config={config}
-          table={table}
           query={query}
           setQuery={setQuery}
           category={category}

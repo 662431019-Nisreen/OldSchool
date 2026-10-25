@@ -1,20 +1,16 @@
 "use client";
-import type { Dispatch, SetStateAction } from "react";
 import {
-  Clock,
-  MapPin,
-  ChevronRight,
-  Search,
-  X,
-  Plus,
-  Coffee,
-  ShoppingBag,
-} from "lucide-react";
+  useEffect,
+  useMemo,
+  useRef,
+  type Dispatch,
+  type SetStateAction,
+} from "react";
+import { Clock, ChevronRight, Search, X, Plus, Coffee } from "lucide-react";
 import { Product, variants, basePrice, imageFor } from "@/lib/catalog";
 import { money } from "@/lib/client";
 type Props = {
   config: any;
-  table: number;
   query: string;
   setQuery: Dispatch<SetStateAction<string>>;
   category: string;
@@ -25,7 +21,6 @@ type Props = {
 };
 export default function Storefront({
   config,
-  table,
   query,
   setQuery,
   category,
@@ -34,6 +29,106 @@ export default function Storefront({
   openProduct,
   nav,
 }: Props) {
+  const barRef = useRef<HTMLDivElement>(null);
+  const sectionRefs = useRef(new Map<string, HTMLElement>());
+  const pendingCategory = useRef<string | null>(null);
+  const activeCategory = useRef(category);
+  const groups = useMemo(
+    () =>
+      query.trim()
+        ? [{ name: "ผลการค้นหา", products: searchResults }]
+        : ["เมนูแนะนำ", ...config.categories]
+            .map((name: string) => ({
+              name,
+              products: searchResults.filter((p) =>
+                name === "เมนูแนะนำ" ? p.recommended : p.category === name,
+              ),
+            }))
+            .filter((g) => g.products.length),
+    [query, searchResults, config.categories],
+  );
+  const groupKey = groups.map((g) => g.name).join("|");
+  const goToCategory = (name: string) => {
+    const section = sectionRefs.current.get(name);
+    if (!section) return;
+    const offset =
+      (document
+        .querySelector(".customer-shell .topbar")
+        ?.getBoundingClientRect().height || 56) +
+      (barRef.current?.offsetHeight || 45) +
+      10;
+    window.scrollTo({
+      top: Math.max(
+        0,
+        window.scrollY + section.getBoundingClientRect().top - offset,
+      ),
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+        ? "instant"
+        : "smooth",
+    });
+  };
+  // Search temporarily replaces the groups; wait for the full menu to render before jumping back.
+  useEffect(() => {
+    if (query.trim() || !pendingCategory.current) return;
+    const target = pendingCategory.current;
+    pendingCategory.current = null;
+    const id = requestAnimationFrame(() => goToCategory(target));
+    return () => cancelAnimationFrame(id);
+  }, [query, groupKey]);
+  // Follow the heading crossing the bottom of the sticky category bar, in either scroll direction.
+  useEffect(() => {
+    if (query.trim()) return;
+    let frame = 0;
+    const names = groupKey.split("|").filter(Boolean);
+    const update = () => {
+      frame = 0;
+      const threshold =
+        (barRef.current?.getBoundingClientRect().bottom || 112) + 14;
+      let current = names[0];
+      for (const name of names) {
+        const section = sectionRefs.current.get(name);
+        if (section && section.getBoundingClientRect().top <= threshold)
+          current = name;
+      }
+      if (current && activeCategory.current !== current) {
+        activeCategory.current = current;
+        setCategory(current);
+      }
+    };
+    const schedule = () => {
+      if (!frame) frame = requestAnimationFrame(update);
+    };
+    window.addEventListener("scroll", schedule, { passive: true });
+    window.addEventListener("resize", schedule);
+    schedule();
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("scroll", schedule);
+      window.removeEventListener("resize", schedule);
+    };
+  }, [groupKey, query, setCategory]);
+  useEffect(() => {
+    activeCategory.current = category;
+    const bar = barRef.current;
+    if (!bar) return;
+    const selected = Array.from(
+      bar.querySelectorAll<HTMLButtonElement>("button"),
+    ).find((b) => b.textContent === category);
+    if (selected)
+      bar.scrollTo({
+        left:
+          selected.offsetLeft - (bar.clientWidth - selected.offsetWidth) / 2,
+        behavior: "smooth",
+      });
+  }, [category]);
+  const selectCategory = (name: string) => {
+    activeCategory.current = name;
+    setCategory(name);
+    if (query.trim()) {
+      pendingCategory.current = name;
+      setQuery("");
+    } else goToCategory(name);
+  };
   return (
     <main className="customer-storefront">
       <div className="customer-cover">
@@ -51,7 +146,6 @@ export default function Storefront({
           </span>
         </div>
         <h1>{config.name}</h1>
-        <p className="restaurant-description">กาแฟ • ชา • เครื่องดื่มชงสด</p>
         <div className="restaurant-hours">
           <Clock size={14} />
           <span>
@@ -60,22 +154,6 @@ export default function Storefront({
           <span className="order-hint">สั่งแล้วรับที่เคาน์เตอร์</span>
         </div>
       </section>
-      <div className="service-location">
-        <MapPin size={19} />
-        <div>
-          <small>กำลังสั่งสำหรับ</small>
-          <strong>
-            {table
-              ? "ทานที่ร้าน · โต๊ะ " + String(table).padStart(2, "0")
-              : "ทานที่ร้าน / รับกลับบ้าน"}
-          </strong>
-        </div>
-        <span>
-          {table
-            ? "เลือกวิธีรับอีกครั้งก่อนสั่ง"
-            : "เลือกวิธีรับในขั้นตอนยืนยัน"}
-        </span>
-      </div>
       <section className="menu-section" id="menu">
         <div className="customer-menu-tools">
           <label className="search">
@@ -93,79 +171,84 @@ export default function Storefront({
             )}
           </label>
         </div>
-        <div className="category-bar" aria-label="หมวดหมู่เมนู">
-          {["เมนูแนะนำ", ...config.categories].map((c: string) => (
+        <div ref={barRef} className="category-bar" aria-label="หมวดหมู่เมนู">
+          {["เมนูแนะนำ", ...config.categories].map((name: string) => (
             <button
-              key={c}
-              aria-pressed={category === c}
-              className={category === c ? "chosen" : ""}
-              onClick={() => {
-                setCategory(c);
-                setQuery("");
-                requestAnimationFrame(() =>
-                  document
-                    .getElementById("menu-results")
-                    ?.scrollIntoView({ behavior: "smooth", block: "start" }),
-                );
+              key={name}
+              aria-pressed={category === name}
+              className={category === name ? "chosen" : ""}
+              onClick={() => selectCategory(name)}
+            >
+              {name}
+            </button>
+          ))}
+        </div>
+        <div className={"menu-groups" + (query.trim() ? " is-search" : "")}>
+          {groups.map((group) => (
+            <section
+              key={group.name}
+              className="menu-group"
+              data-menu-category={group.name}
+              aria-label={group.name}
+              ref={(node) => {
+                if (node) sectionRefs.current.set(group.name, node);
+                else sectionRefs.current.delete(group.name);
               }}
             >
-              {c}
-            </button>
-          ))}
-        </div>
-        <div className="section-label" id="menu-results">
-          <div>
-            <h2>{query ? "ผลการค้นหา" : category}</h2>
-            <p>
-              {query
-                ? "เมนูที่ตรงกับ “" + query + "”"
-                : category === "เมนูแนะนำ"
-                  ? "เมนูที่อยากให้ลองจาก OLD SCHOOL"
-                  : "เลือกเมนู แล้วปรับความหวานได้ตามชอบ"}
-            </p>
-          </div>
-          <span>{searchResults.length} เมนู</span>
-        </div>
-        <div className="product-grid">
-          {searchResults.map((p) => (
-            <button
-              className="product-card"
-              key={p.id}
-              onClick={() => openProduct(p)}
-              aria-label={"เลือก " + p.name}
-            >
-              <div className="product-image">
-                <img src={imageFor(p)} alt={p.name} loading="lazy" />
-                {p.recommended && <span className="recommend">แนะนำ</span>}
-                <span className="image-caption">ภาพประกอบ</span>
-              </div>
-              <div className="product-content">
-                <h3>{p.name}</h3>
-                <small>{p.en}</small>
-                <div className="product-bottom">
-                  <span className="price">
-                    {variants(p).length > 1 && <small>เริ่ม </small>}฿
-                    {money(basePrice(p))}
-                  </span>
-                  <span className="add-circle" aria-hidden="true">
-                    <Plus size={20} />
-                  </span>
+              <div className="section-label">
+                <div>
+                  <h2>{group.name}</h2>
+                  <p>
+                    {query.trim()
+                      ? "เมนูที่ตรงกับ “" + query + "”"
+                      : group.name === "เมนูแนะนำ"
+                        ? "เมนูที่อยากให้ลองจาก OLD SCHOOL"
+                        : "เลือกเมนู แล้วปรับความหวานได้ตามชอบ"}
+                  </p>
                 </div>
+                <span>{group.products.length} เมนู</span>
               </div>
-            </button>
+              <div className="product-grid">
+                {group.products.map((p) => (
+                  <button
+                    className="product-card"
+                    key={p.id}
+                    onClick={() => openProduct(p)}
+                    aria-label={"เลือก " + p.name}
+                  >
+                    <div className="product-image">
+                      <img src={imageFor(p)} alt={p.name} loading="lazy" />
+                      {p.recommended && (
+                        <span className="recommend">แนะนำ</span>
+                      )}
+                    </div>
+                    <div className="product-content">
+                      <h3>{p.name}</h3>
+                      <small>{p.en}</small>
+                      <div className="product-bottom">
+                        <span className="price">
+                          {variants(p).length > 1 && <small>เริ่ม </small>}฿
+                          {money(basePrice(p))}
+                        </span>
+                        <span className="add-circle" aria-hidden="true">
+                          <Plus size={20} />
+                        </span>
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </section>
           ))}
         </div>
-        {!searchResults.length && (
+        {query.trim() && !searchResults.length && (
           <div className="empty">
             <Search size={32} />
             <h3>ไม่พบเมนูที่ค้นหา</h3>
             <p>ลองค้นหาด้วยชื่ออื่น หรือเลือกหมวดหมู่ด้านบน</p>
             <button
               className="text-button"
-              onClick={() => {
-                setQuery("");
-                setCategory("เมนูแนะนำ");
-              }}
+              onClick={() => selectCategory("เมนูแนะนำ")}
             >
               กลับไปดูเมนูแนะนำ
             </button>

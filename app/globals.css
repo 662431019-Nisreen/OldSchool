@@ -2629,3 +2629,15 @@ td button,
     scroll-margin-top: 112px;
   }
 }
+/* Continuous category sections; give the final short category room to reach the sticky bar. */
+.customer-shell .menu-group + .menu-group {
+  margin-top: 24px;
+  padding-top: 2px;
+  border-top: 6px solid #f7f5f1;
+}
+.customer-shell .menu-groups:not(.is-search) .menu-group:last-child {
+  min-height: calc(100svh - 165px);
+}
+.customer-shell .category-bar {
+  position: sticky;
+}

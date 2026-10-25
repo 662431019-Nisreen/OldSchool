@@ -51,7 +51,6 @@ export default function ProductDialog({
         </button>
         <div className="modal-photo">
           <img src={imageFor(selected)} alt={selected.name} />
-          <span>ภาพประกอบเครื่องดื่ม</span>
         </div>
         <div className="modal-body">
           <small className="eyebrow">{selected.en}</small>
