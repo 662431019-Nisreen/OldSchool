@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { api, money, statusNames } from "@/lib/client";
 import Storefront from "@/components/pos/Storefront";
+import CartItem from "@/components/pos/CartItem";
 import ProductDialog from "@/components/pos/ProductDialog";
 import TableQr from "@/components/pos/TableQr";
 import {
@@ -426,9 +427,6 @@ export default function App() {
         <main className="workspace narrow">
           <div className="eyebrow">YOUR LITTLE COFFEE MOMENT</div>
           <h1>ออเดอร์ของฉัน</h1>
-          <p className="muted">
-            อัปเดตอัตโนมัติทุก 4 วินาที • เก็บสิทธิ์ติดตามบนอุปกรณ์นี้
-          </p>
           <div className="notice">
             <Bell />
             <div>
@@ -1153,76 +1151,45 @@ export default function App() {
                 </div>
               ) : (
                 cart.map((l) => (
-                  <div className="cart-item" key={l.key}>
-                    <div>
-                      <button
-                        className="cart-edit"
-                        onClick={() => {
-                          const p = products.find((p) => p.id === l.productId);
-                          if (!p) {
-                            notify("ไม่พบเมนูนี้แล้ว");
-                            return;
-                          }
-                          openProduct(p);
-                          setVariant(l.variant);
-                          setSweet(l.sweet);
-                          setQty(l.qty);
-                          setNote(l.note);
-                          setEditingLine(l.key);
-                          setCartOpen(false);
-                        }}
-                      >
-                        <b>{l.name}</b>
-                        <span>แก้ไข</span>
-                      </button>
-                      <small>
-                        {l.variantLabel} · หวาน {l.sweet}%
-                        {l.note ? " · " + l.note : ""}
-                      </small>
-                      <div className="quantity">
-                        <button
-                          aria-label="ลดจำนวน"
-                          onClick={() =>
-                            setCart((a) =>
-                              a.flatMap((x) =>
-                                x.key === l.key
-                                  ? x.qty > 1
-                                    ? [{ ...x, qty: x.qty - 1 }]
-                                    : []
-                                  : [x],
-                              ),
-                            )
-                          }
-                        >
-                          <Minus size={14} />
-                        </button>
-                        <b>{l.qty}</b>
-                        <button
-                          aria-label="เพิ่มจำนวน"
-                          disabled={l.qty >= 30}
-                          onClick={() =>
-                            setCart((a) =>
-                              a.map((x) =>
-                                x.key === l.key ? { ...x, qty: x.qty + 1 } : x,
-                              ),
-                            )
-                          }
-                        >
-                          <Plus size={14} />
-                        </button>
-                      </div>
-                    </div>
-                    <strong>฿{l.price * l.qty}</strong>
-                    <button
-                      className="remove"
-                      aria-label="ลบรายการ"
-                      onClick={() =>
-                        setCart((a) => a.filter((x) => x.key !== l.key))
+                  <CartItem
+                    key={l.key}
+                    line={l}
+                    product={products.find((p) => p.id === l.productId)}
+                    onEdit={() => {
+                      const p = products.find((p) => p.id === l.productId);
+                      if (!p) {
+                        notify("ไม่พบเมนูนี้แล้ว");
+                        return;
                       }
-                    >
-                      <X size={15} />
-                    </button>
-                  </div>
+                      openProduct(p);
+                      setVariant(l.variant);
+                      setSweet(l.sweet);
+                      setQty(l.qty);
+                      setNote(l.note);
+                      setEditingLine(l.key);
+                      setCartOpen(false);
+                    }}
+                    onDecrease={() =>
+                      setCart((a) =>
+                        a.flatMap((x) =>
+                          x.key === l.key
+                            ? x.qty > 1
+                              ? [{ ...x, qty: x.qty - 1 }]
+                              : []
+                            : [x],
+                        ),
+                      )
+                    }
+                    onIncrease={() =>
+                      setCart((a) =>
+                        a.map((x) =>
+                          x.key === l.key
+                            ? { ...x, qty: Math.min(30, x.qty + 1) }
+                            : x,
+                        ),
+                      )
+                    }
+                  />
                 ))
               )}
               {checkout && (
