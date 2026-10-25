@@ -81,10 +81,8 @@ export default function App() {
     [note, setNote] = useState("");
   const [cart, setCart] = useState<Line[]>([]),
     [cartOpen, setCartOpen] = useState(false),
-    [checkout, setCheckout] = useState(false),
     [orderType, setOrderType] = useState("dinein"),
     [table, setTable] = useState(0),
-    [method, setMethod] = useState("cash"),
     [busy, setBusy] = useState(false),
     [toast, setToast] = useState(""),
     [user, setUser] = useState<any>(null),
@@ -119,13 +117,36 @@ export default function App() {
   useEffect(() => {
     load();
     const p = new URLSearchParams(location.search);
-    const t = Number(p.get("table"));
-    if (t > 0) setTable(t);
+    let context: { type: string; table: number } | null = null;
+    if (p.get("type") === "takeaway") context = { type: "takeaway", table: 0 };
+    else if (p.has("table")) {
+      const t = Number(p.get("table"));
+      if (Number.isInteger(t) && t > 0) context = { type: "dinein", table: t };
+    } else {
+      try {
+        context = JSON.parse(
+          sessionStorage.getItem("os_order_context") || "null",
+        );
+      } catch {}
+    }
+    if (
+      context &&
+      (context.type === "takeaway" ||
+        (context.type === "dinein" &&
+          Number.isInteger(context.table) &&
+          context.table > 0))
+    ) {
+      setOrderType(context.type);
+      setTable(context.type === "takeaway" ? 0 : context.table);
+      sessionStorage.setItem("os_order_context", JSON.stringify(context));
+    } else {
+      setTable(0);
+      sessionStorage.removeItem("os_order_context");
+    }
     if (p.get("view") === "orders") setView("orders");
     if (location.pathname === "/install") setView("install");
     if (location.pathname === "/cart" || location.pathname === "/checkout") {
       setCartOpen(true);
-      setCheckout(location.pathname === "/checkout");
     }
     if (location.pathname === "/login") setLogin(true);
     if (location.pathname === "/staff" || location.pathname === "/admin") {
@@ -226,13 +247,11 @@ export default function App() {
         items: cart,
         type: orderType,
         table,
-        method,
         idem,
       });
       setCart([]);
       setOrders((a) => [d.order, ...a.filter((o) => o.id !== d.order.id)]);
       setCartOpen(false);
-      setCheckout(false);
       setView("orders");
       const next = crypto.randomUUID();
       setIdem(next);
@@ -398,7 +417,6 @@ export default function App() {
           aria-label="เปิดตะกร้า"
           onClick={() => {
             setCartOpen(true);
-            setCheckout(false);
           }}
         >
           <ShoppingBag size={19} />
@@ -503,8 +521,7 @@ export default function App() {
                 <p className={o.payment === "paid" ? "paid-text" : "muted"}>
                   {o.payment === "paid"
                     ? "✓ ยืนยันชำระเงินแล้ว"
-                    : "รอชำระเงินที่เคาน์เตอร์ • " +
-                      (o.method === "qr" ? "QR ธนาคาร" : "เงินสด")}
+                    : "รอชำระเงินที่เคาน์เตอร์"}
                 </p>
                 {o.payment !== "paid" && o.method === "qr" && config.bankQr && (
                   <img
@@ -907,10 +924,11 @@ export default function App() {
                     </label>
                   </div>
                   <p className="muted">
-                    QR แต่ละโต๊ะเปิดหน้าร้านพร้อมหมายเลขโต๊ะ •
-                    เว็บไซต์ต้องเปิดให้ลูกค้าเข้าถึงก่อนใช้จริง
+                    QR โต๊ะผูกหมายเลขโต๊ะให้อัตโนมัติ ส่วน QR Takeaway
+                    ใช้สำหรับรับกลับบ้าน
                   </p>
                   <div className="qr-grid">
+                    <TableQr />
                     {Array.from({ length: config.tables }, (_, i) => (
                       <TableQr key={i} table={i + 1} />
                     ))}
@@ -1128,8 +1146,7 @@ export default function App() {
           >
             <div className="row drawer-header">
               <h2>
-                {checkout ? "ตรวจสอบก่อนสั่ง" : "ตะกร้าของฉัน"}{" "}
-                <small>({count})</small>
+                ตะกร้าของฉัน <small>({count})</small>
               </h2>
               <button onClick={() => setCartOpen(false)} aria-label="ปิดตะกร้า">
                 <X />
@@ -1192,65 +1209,21 @@ export default function App() {
                   />
                 ))
               )}
-              {checkout && (
-                <>
-                  <h4>รับเครื่องดื่มแบบไหนดี?</h4>
-                  <div className="choice-row">
-                    <button
-                      className={orderType === "dinein" ? "chosen" : ""}
-                      onClick={() => setOrderType("dinein")}
-                    >
-                      <Coffee size={17} /> ทานที่ร้าน
-                    </button>
-                    <button
-                      className={orderType === "takeaway" ? "chosen" : ""}
-                      onClick={() => setOrderType("takeaway")}
-                    >
-                      <Package size={17} /> รับกลับบ้าน
-                    </button>
-                  </div>
-                  {orderType === "dinein" && (
-                    <label className="note-label">
-                      หมายเลขโต๊ะ
-                      <select
-                        value={table}
-                        onChange={(e) => setTable(Number(e.target.value))}
-                      >
-                        <option value={0}>เลือกโต๊ะของคุณ</option>
-                        {Array.from({ length: config.tables }, (_, i) => (
-                          <option key={i} value={i + 1}>
-                            โต๊ะ {i + 1}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  )}
-                  <h4>ชำระเงินที่เคาน์เตอร์</h4>
-                  <div className="choice-row">
-                    <button
-                      className={method === "cash" ? "chosen" : ""}
-                      onClick={() => setMethod("cash")}
-                    >
-                      เงินสด
-                    </button>
-                    <button
-                      className={method === "qr" ? "chosen" : ""}
-                      onClick={() => setMethod("qr")}
-                    >
-                      QR ธนาคาร
-                    </button>
-                  </div>
-                  <p className="muted">
-                    ร้านจะยืนยันยอดและการชำระเงินที่เคาน์เตอร์
-                  </p>
-                </>
-              )}
             </div>
             <div className="drawer-footer">
               <div className="row">
                 <span>รวมทั้งหมด</span>
                 <strong className="price">฿{money(total)}</strong>
               </div>
+              {cart.length > 0 && (
+                <p className="cart-order-context">
+                  {orderType === "takeaway"
+                    ? "รับกลับบ้าน · ชำระเงินที่เคาน์เตอร์"
+                    : table > 0 && table <= config.tables
+                      ? "โต๊ะ " + table + " · ชำระเงินที่เคาน์เตอร์"
+                      : "กรุณาสแกน QR ที่โต๊ะ หรือ QR สำหรับกลับบ้านก่อนสั่ง"}
+                </p>
+              )}
               <button
                 className="primary full"
                 disabled={
@@ -1258,25 +1231,13 @@ export default function App() {
                   busy ||
                   !ready ||
                   !config.accepting ||
-                  (checkout && orderType === "dinein" && !table)
+                  (orderType === "dinein" && (!table || table > config.tables))
                 }
-                onClick={() => (checkout ? submit() : setCheckout(true))}
+                onClick={submit}
               >
-                {busy
-                  ? "กำลังส่งออเดอร์..."
-                  : checkout
-                    ? "ยืนยันสั่งเครื่องดื่ม"
-                    : "ตรวจสอบรายการ"}
+                {busy ? "กำลังส่งออเดอร์..." : "ยืนยันสั่งเครื่องดื่ม"}
                 <ChevronRight size={18} />
               </button>
-              {checkout && (
-                <button
-                  className="text-button"
-                  onClick={() => setCheckout(false)}
-                >
-                  กลับไปแก้ไขตะกร้า
-                </button>
-              )}
             </div>
           </section>
         </div>
@@ -1547,7 +1508,6 @@ export default function App() {
           className="floating-cart"
           onClick={() => {
             setCartOpen(true);
-            setCheckout(false);
           }}
         >
           <span>
@@ -1576,7 +1536,6 @@ export default function App() {
           <button
             onClick={() => {
               setCartOpen(true);
-              setCheckout(false);
             }}
           >
             <span className="bottom-cart-icon">
@@ -1623,30 +1582,36 @@ export default function App() {
               ? "ชำระแล้ว"
               : o.method === "qr"
                 ? "รอ QR ธนาคาร"
-                : "รอเงินสด"}
+                : o.method === "cash"
+                  ? "รอเงินสด"
+                  : "รอชำระที่เคาน์เตอร์"}
           </span>
         </div>
         <div className="staff-actions">
-          {o.payment !== "paid" && (
-            <button
-              disabled={busy}
-              className="secondary"
-              onClick={() => {
-                if (
-                  confirm(
-                    "ยืนยันรับชำระ " +
-                      money(o.total) +
-                      " บาท สำหรับ " +
-                      o.number +
-                      "?",
+          {o.payment !== "paid" &&
+            ["cash", "qr"].map((method) => (
+              <button
+                key={method}
+                disabled={busy}
+                className="secondary"
+                onClick={() => {
+                  if (
+                    confirm(
+                      "ยืนยันรับชำระ" +
+                        (method === "cash" ? "เงินสด" : " QR ธนาคาร") +
+                        " " +
+                        money(o.total) +
+                        " บาท สำหรับ " +
+                        o.number +
+                        "?",
+                    )
                   )
-                )
-                  mutate("payment", { id: o.id, version: o.version });
-              }}
-            >
-              ยืนยันรับชำระ
-            </button>
-          )}
+                    mutate("payment", { id: o.id, version: o.version, method });
+                }}
+              >
+                {method === "cash" ? "รับเงินสด" : "รับ QR ธนาคาร"}
+              </button>
+            ))}
           {o.status !== "done" && (
             <button
               className="primary"

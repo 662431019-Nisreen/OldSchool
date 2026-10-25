@@ -106,6 +106,7 @@ const results = await Promise.all([
 ]);
 assert.equal(results[0].order.id, results[1].order.id);
 assert.equal(results[0].order.total, 120);
+assert.equal(results[0].order.method, "counter");
 let order = results[0].order;
 await other("menu");
 assert.equal((await other("mine")).orders.length, 0);
@@ -149,6 +150,10 @@ assert.equal(
 );
 assert.equal(
   (await staff("payment", { id: order.id, version: 2 })).status,
+  400,
+);
+assert.equal(
+  (await staff("payment", { id: order.id, version: 2, method: "cash" })).status,
   200,
 );
 assert.equal(
@@ -158,6 +163,36 @@ assert.equal(
 order = (await guest("mine")).orders[0];
 assert.equal(order.status, "done");
 assert.equal(order.payment, "paid");
+const takeaway = await guest("order", {
+  ...payload,
+  idem: crypto.randomUUID(),
+  type: "takeaway",
+  table: 999,
+});
+assert.equal(takeaway.status, 200);
+assert.equal(takeaway.order.table, null);
+assert.equal(takeaway.order.type, "takeaway");
+assert.equal(takeaway.order.method, "counter");
+assert.equal(
+  (await staff("payment", { id: takeaway.order.id, version: 0, method: "qr" }))
+    .status,
+  200,
+);
+const paidTakeaway = (await guest("mine")).orders.find(
+  (o) => o.id === takeaway.order.id,
+);
+assert.equal(paidTakeaway.method, "qr");
+assert.equal(paidTakeaway.payment, "paid");
+assert.equal(
+  (
+    await staff("payment", {
+      id: takeaway.order.id,
+      version: 1,
+      method: "cash",
+    })
+  ).status,
+  409,
+);
 await admin("disable-user", { id: staffId, active: false });
 assert.equal((await staff("orders")).status, 401);
 console.log(

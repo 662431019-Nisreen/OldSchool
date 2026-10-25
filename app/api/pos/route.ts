@@ -186,7 +186,7 @@ export async function POST(r: Request) {
             items,
             type: b.type,
             table: b.type === "dinein" ? b.table : null,
-            method: b.method === "qr" ? "qr" : "cash",
+            method: "counter",
           }),
           total,
           new Date().toISOString(),
@@ -237,12 +237,26 @@ export async function POST(r: Request) {
         );
       const field = b.action === "status" ? "status" : "payment",
         value = b.action === "status" ? b.status : "paid";
-      const changed = await db
-        .prepare(
-          `UPDATE orders SET ${field}=?,version=version+1 WHERE id=? AND version=?`,
-        )
-        .bind(value, b.id, b.version)
-        .run();
+      if (b.action === "payment" && !["cash", "qr"].includes(b.method))
+        return json({ error: "กรุณาระบุวิธีรับชำระเงิน" }, 400);
+      const changed =
+        b.action === "payment"
+          ? await db
+              .prepare(
+                "UPDATE orders SET payment='paid',payload=?,version=version+1 WHERE id=? AND version=? AND payment='unpaid'",
+              )
+              .bind(
+                JSON.stringify({ ...JSON.parse(o.payload), method: b.method }),
+                b.id,
+                b.version,
+              )
+              .run()
+          : await db
+              .prepare(
+                `UPDATE orders SET ${field}=?,version=version+1 WHERE id=? AND version=?`,
+              )
+              .bind(value, b.id, b.version)
+              .run();
       if (!changed.meta.changes)
         return json({ error: "ออเดอร์ถูกแก้ไขแล้ว กรุณาโหลดใหม่" }, 409);
       await log(u.id, b.action, String(b.id));
