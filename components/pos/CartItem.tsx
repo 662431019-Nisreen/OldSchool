@@ -36,7 +36,7 @@ export default function CartItem({
           <strong>฿{money(line.price * line.qty)}</strong>
         </div>
         <ul className="cart-item-options">
-          <li>{line.variantLabel}</li>
+          {line.variantLabel !== "ปกติ" && <li>{line.variantLabel}</li>}
           {product?.sweet !== false && <li>หวาน {line.sweet}%</li>}
           {line.note && <li>{line.note}</li>}
         </ul>

@@ -76,19 +76,21 @@ export function validateCart(lines: any[], products: Product[]) {
   return lines.map((line) => {
     const p = products.find((x) => x.id === line.productId && !x.hidden);
     if (!p) throw new Error("เมนูนี้ยังไม่พร้อมขาย");
+    if (p.soldOut) throw new Error(p.name + " สินค้าหมดชั่วคราว");
     const v = variants(p).find((x) => x.id === line.variant);
     if (
       !v ||
       !Number.isInteger(line.qty) ||
       line.qty < 1 ||
       line.qty > 30 ||
-      !(p.sweetLevels || sweets).includes(line.sweet)
+      (p.sweet !== false && !(p.sweetLevels || sweets).includes(line.sweet))
     )
       throw new Error("ตัวเลือกสินค้าไม่ถูกต้อง");
     return {
       productId: p.id,
       name: p.name,
       category: p.category,
+      unit: p.unit || (p.price != null ? "piece" : "cup"),
       variant: v.id,
       variantLabel: v.label,
       sweet: p.sweet === false ? null : line.sweet,

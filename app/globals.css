@@ -3009,3 +3009,62 @@ td button,
 .workspace-navigation .workspace-status-strip {
   margin-bottom: 4px;
 }
+/* Sold-out products remain visible while ordering is blocked. */
+.customer-shell .product-card.sold-out:disabled {
+  opacity: 1;
+  cursor: not-allowed;
+}
+.customer-shell .product-card.sold-out .product-image > img {
+  filter: grayscale(0.6);
+}
+.customer-shell .product-card.sold-out .product-image:after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: #d8d8d88c;
+  z-index: 1;
+  border-radius: inherit;
+}
+.sold-out-label {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 2;
+  white-space: nowrap;
+  padding: 7px 9px;
+  border-radius: 5px;
+  background: #ffffffed;
+  color: #605b55;
+  font-weight: 600;
+  font-size: 11px;
+  box-shadow: 0 2px 9px #0000000a;
+}
+.customer-shell .product-card.sold-out .product-content {
+  opacity: 0.55;
+}
+.customer-shell .product-card.sold-out .add-circle {
+  background: #eee;
+  border-color: #ccc;
+  color: #999;
+}
+.stock-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  white-space: nowrap;
+  margin-top: 8px;
+  color: #8b6e46;
+}
+.stock-toggle input {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--brown);
+}
+@media (max-width: 360px) {
+  .sold-out-label {
+    font-size: 9px;
+    padding: 6px;
+  }
+}

@@ -211,13 +211,19 @@ export default function Storefront({
               <div className="product-grid">
                 {group.products.map((p) => (
                   <button
-                    className="product-card"
+                    className={"product-card" + (p.soldOut ? " sold-out" : "")}
+                    disabled={!!p.soldOut}
                     key={p.id}
                     onClick={() => openProduct(p)}
                     aria-label={"เลือก " + p.name}
                   >
                     <div className="product-image">
                       <img src={imageFor(p)} alt={p.name} loading="lazy" />
+                      {p.soldOut && (
+                        <span className="sold-out-label">
+                          สินค้าหมดชั่วคราว
+                        </span>
+                      )}
                       {p.recommended && (
                         <span className="recommend">แนะนำ</span>
                       )}

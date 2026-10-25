@@ -36,7 +36,14 @@ export async function GET(r: Request) {
     ยอดรวม: o.total,
     สถานะ: names[o.status],
     ชำระเงิน: o.payment === "paid" ? "ชำระแล้ว" : "ยังไม่ชำระ",
-    จำนวนแก้ว: o.items.reduce((s: number, i: any) => s + i.qty, 0),
+    จำนวนแก้ว: o.items.reduce(
+      (s: number, i: any) => s + (i.unit === "piece" ? 0 : i.qty),
+      0,
+    ),
+    จำนวนชิ้น: o.items.reduce(
+      (s: number, i: any) => s + (i.unit === "piece" ? i.qty : 0),
+      0,
+    ),
   }));
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "Orders");

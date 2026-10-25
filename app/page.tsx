@@ -195,6 +195,15 @@ export default function App() {
         })
         .catch((e) => notify(e.message));
   }, [view, user]);
+  useEffect(() => {
+    if (view === "admin" || view === "staff") return;
+    const id = setInterval(() => {
+      api("menu")
+        .then((d) => setConfig(d.config))
+        .catch(() => {});
+    }, 10000);
+    return () => clearInterval(id);
+  }, [view]);
   const products: Product[] = config.products;
   const searchResults = products.filter(
     (p) =>
@@ -207,8 +216,14 @@ export default function App() {
   const total = cart.reduce((s, l) => s + l.price * l.qty, 0),
     count = cart.reduce((s, l) => s + l.qty, 0);
   const openProduct = (p: Product) => {
+    if (p.soldOut) {
+      notify("สินค้าหมดชั่วคราว");
+      return;
+    }
     setSelected(p);
-    setVariant(p.cold != null ? "cold" : variants(p)[0].id);
+    setVariant(
+      p.price != null ? "regular" : p.cold != null ? "cold" : variants(p)[0].id,
+    );
     setSweet(
       (p.sweetLevels || sweets).includes(100)
         ? 100
@@ -220,6 +235,10 @@ export default function App() {
   };
   const add = () => {
     if (!selected) return;
+    if (products.find((p) => p.id === selected.id)?.soldOut) {
+      notify("สินค้าหมดชั่วคราว");
+      return;
+    }
     const v = variants(selected).find((v) => v.id === variant)!;
     const line = {
       key: crypto.randomUUID(),
@@ -354,7 +373,12 @@ export default function App() {
   const paid = filteredOrders.filter((o) => o.payment === "paid");
   const sales = paid.reduce((s, o) => s + o.total, 0);
   const cups = paid.reduce(
-    (s, o) => s + o.items.reduce((n: number, i: any) => n + i.qty, 0),
+    (s, o) =>
+      s +
+      o.items.reduce(
+        (n: number, i: any) => n + (i.unit === "piece" ? 0 : i.qty),
+        0,
+      ),
     0,
   );
   return (
@@ -583,9 +607,6 @@ export default function App() {
             <div>
               <div className="eyebrow">OLD SCHOOL / WORKSPACE</div>
               <h1>หน้าทำงานร้าน</h1>
-              <p className="muted">
-                สวัสดี {user.name} · รับออเดอร์ ชง และรับชำระเงินได้ที่นี่
-              </p>
             </div>
             <button
               className="secondary"
@@ -805,7 +826,7 @@ export default function App() {
                         <tr>
                           <th>เมนู</th>
                           <th>หมวดหมู่</th>
-                          <th>ร้อน / เย็น / ปั่น</th>
+                          <th>ราคา</th>
                           <th>สถานะ</th>
                           <th />
                         </tr>
@@ -819,16 +840,56 @@ export default function App() {
                             </td>
                             <td>{p.category}</td>
                             <td>
-                              {[p.hot, p.cold, p.blend]
-                                .map((v) => v ?? "–")
+                              {variants(p)
+                                .map((v) => v.label + " ฿" + v.price)
                                 .join(" / ")}
                             </td>
                             <td>
                               {p.hidden ? "ซ่อน" : "แสดง"}
                               {p.recommended ? " · แนะนำ" : ""}
+                              <label className="stock-toggle">
+                                <input
+                                  type="checkbox"
+                                  checked={!!p.soldOut}
+                                  disabled={busy}
+                                  aria-label={"สินค้าหมดชั่วคราว " + p.name}
+                                  onChange={(e) =>
+                                    saveConfig({
+                                      ...config,
+                                      products: products.map((item) =>
+                                        item.id === p.id
+                                          ? {
+                                              ...item,
+                                              soldOut: e.target.checked,
+                                            }
+                                          : item,
+                                      ),
+                                    })
+                                  }
+                                />{" "}
+                                สินค้าหมดชั่วคราว
+                              </label>
                             </td>
                             <td>
-                              <button onClick={() => setEditing({ ...p })}>
+                              <button
+                                onClick={() =>
+                                  setEditing(
+                                    /เบเกอรี|bakery/i.test(p.category) &&
+                                      p.price == null
+                                      ? {
+                                          ...p,
+                                          price:
+                                            p.cold ?? p.hot ?? p.blend ?? 35,
+                                          hot: null,
+                                          cold: null,
+                                          blend: null,
+                                          sweet: false,
+                                          unit: "piece",
+                                        }
+                                      : { ...p },
+                                  )
+                                }
+                              >
                                 แก้ไข
                               </button>
                             </td>
@@ -1146,7 +1207,12 @@ export default function App() {
       )}
       {selected && (
         <ProductDialog
-          selected={selected}
+          selected={{
+            ...selected,
+            soldOut:
+              products.find((p) => p.id === selected.id)?.soldOut ??
+              selected.soldOut,
+          }}
           setSelected={setSelected}
           variant={variant}
           setVariant={setVariant}
@@ -1406,7 +1472,25 @@ export default function App() {
               <select
                 value={editing.category}
                 onChange={(e) =>
-                  setEditing({ ...editing, category: e.target.value })
+                  setEditing(
+                    /เบเกอรี|bakery/i.test(e.target.value)
+                      ? {
+                          ...editing,
+                          category: e.target.value,
+                          price:
+                            editing.price ??
+                            editing.cold ??
+                            editing.hot ??
+                            editing.blend ??
+                            35,
+                          hot: null,
+                          cold: null,
+                          blend: null,
+                          sweet: false,
+                          unit: "piece",
+                        }
+                      : { ...editing, category: e.target.value },
+                  )
                 }
               >
                 {config.categories.map((c: string) => (
@@ -1414,30 +1498,95 @@ export default function App() {
                 ))}
               </select>
             </label>
-            <div className="form-grid">
-              {[
-                ["hot", "ร้อน"],
-                ["cold", "เย็น"],
-                ["blend", "ปั่น"],
-              ].map(([k, n]) => (
-                <label key={k}>
-                  ราคา{n}
-                  <input
-                    type="number"
-                    min={0}
-                    value={editing[k] ?? ""}
-                    placeholder="เว้นว่าง = ไม่มี"
-                    onChange={(e) =>
-                      setEditing({
-                        ...editing,
-                        [k]:
-                          e.target.value === "" ? null : Number(e.target.value),
-                      })
-                    }
-                  />
-                </label>
-              ))}
-            </div>
+            <label>
+              รูปแบบราคา
+              <select
+                value={editing.price != null ? "regular" : "drink"}
+                onChange={(e) =>
+                  setEditing(
+                    e.target.value === "regular"
+                      ? {
+                          ...editing,
+                          price:
+                            editing.price ??
+                            editing.cold ??
+                            editing.hot ??
+                            editing.blend ??
+                            35,
+                          hot: null,
+                          cold: null,
+                          blend: null,
+                          sweet: false,
+                          unit: "piece",
+                        }
+                      : {
+                          ...editing,
+                          price: null,
+                          cold: editing.price ?? 35,
+                          hot: null,
+                          blend: null,
+                          sweet: true,
+                          unit: "cup",
+                        },
+                  )
+                }
+              >
+                <option value="drink">เครื่องดื่ม — ร้อน / เย็น / ปั่น</option>
+                <option value="regular">
+                  ราคาปกติ — เบเกอรี่ / สินค้าทั่วไป
+                </option>
+              </select>
+            </label>
+            {editing.price != null ? (
+              <label>
+                ราคาปกติ (บาท)
+                <input
+                  type="number"
+                  min={0}
+                  max={10000}
+                  step={1}
+                  required
+                  value={editing.price}
+                  onChange={(e) =>
+                    setEditing({
+                      ...editing,
+                      price:
+                        e.target.value === "" ? "" : Number(e.target.value),
+                    })
+                  }
+                />
+              </label>
+            ) : (
+              <>
+                <div className="form-grid">
+                  {[
+                    ["hot", "ร้อน"],
+                    ["cold", "เย็น"],
+                    ["blend", "ปั่น"],
+                  ].map(([k, n]) => (
+                    <label key={k}>
+                      ราคา{n}
+                      <input
+                        type="number"
+                        min={0}
+                        value={editing[k] ?? ""}
+                        placeholder="เว้นว่าง = ไม่มี"
+                        onChange={(e) =>
+                          setEditing({
+                            ...editing,
+                            [k]:
+                              e.target.value === ""
+                                ? null
+                                : Number(e.target.value),
+                          })
+                        }
+                      />
+                    </label>
+                  ))}
+                </div>{" "}
+              </>
+            )}
+
             <label>
               รูปสินค้า
               <input
@@ -1458,6 +1607,16 @@ export default function App() {
                 }
               />{" "}
               เมนูแนะนำ
+            </label>
+            <label className="check-label">
+              <input
+                type="checkbox"
+                checked={!!editing.soldOut}
+                onChange={(e) =>
+                  setEditing({ ...editing, soldOut: e.target.checked })
+                }
+              />{" "}
+              สินค้าหมดชั่วคราว
             </label>
             <label className="check-label">
               <input

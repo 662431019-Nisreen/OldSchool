@@ -61,23 +61,30 @@ export default function ProductDialog({
             </b>
           </div>
           <p className="muted">
-            {selected.description || "ชงสดใหม่ทุกแก้ว เลือกรูปแบบที่คุณชอบ"}
+            {selected.description ||
+              (selected.price != null
+                ? "เลือกจำนวนสินค้าที่ต้องการ"
+                : "ชงสดใหม่ทุกแก้ว เลือกรูปแบบที่คุณชอบ")}
           </p>
-          <h4>
-            รูปแบบเครื่องดื่ม <span>เลือก 1</span>
-          </h4>
-          <div className="choice-row">
-            {variants(selected).map((v) => (
-              <button
-                className={variant === v.id ? "chosen" : ""}
-                onClick={() => setVariant(v.id)}
-                key={v.id}
-              >
-                {v.label}
-                <small>฿{v.price}</small>
-              </button>
-            ))}
-          </div>
+          {selected.price == null && (
+            <>
+              <h4>
+                รูปแบบเครื่องดื่ม <span>เลือก 1</span>
+              </h4>
+              <div className="choice-row">
+                {variants(selected).map((v) => (
+                  <button
+                    className={variant === v.id ? "chosen" : ""}
+                    onClick={() => setVariant(v.id)}
+                    key={v.id}
+                  >
+                    {v.label}
+                    <small>฿{v.price}</small>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
           {selected.sweet !== false && (
             <>
               <h4>
@@ -99,7 +106,11 @@ export default function ProductDialog({
           <label className="note-label">
             หมายเหตุถึงร้าน
             <input
-              placeholder="เช่น น้ำแข็งน้อย (ไม่เพิ่มท็อปปิ้ง)"
+              placeholder={
+                selected.price != null
+                  ? "ระบุหมายเหตุเพิ่มเติม (ถ้ามี)"
+                  : "เช่น น้ำแข็งน้อย (ไม่เพิ่มท็อปปิ้ง)"
+              }
               value={note}
               maxLength={200}
               onChange={(e) => setNote(e.target.value)}
@@ -125,7 +136,7 @@ export default function ProductDialog({
             </div>
             <button
               className="primary"
-              disabled={!ready || !config.accepting}
+              disabled={!ready || !config.accepting || !!selected.soldOut}
               onClick={add}
             >
               <ShoppingBag size={17} />

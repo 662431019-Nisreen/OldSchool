@@ -311,12 +311,16 @@ export async function POST(r: Request) {
           ids.has(p.id) ||
           !p.name ||
           !p.category ||
-          ![p.hot, p.cold, p.blend].some((v) => typeof v === "number") ||
-          [p.hot, p.cold, p.blend].some(
+          ![p.price, p.hot, p.cold, p.blend].some(
+            (v) => typeof v === "number",
+          ) ||
+          [p.price, p.hot, p.cold, p.blend].some(
             (v) => v != null && (!Number.isInteger(v) || v < 0 || v > 10000),
           )
         )
           return json({ error: "ตรวจสอบชื่อและราคาสินค้า" }, 400);
+        if (p.soldOut != null && typeof p.soldOut !== "boolean")
+          return json({ error: "สถานะสินค้าหมดไม่ถูกต้อง" }, 400);
         if (
           p.sweetLevels &&
           (!Array.isArray(p.sweetLevels) ||

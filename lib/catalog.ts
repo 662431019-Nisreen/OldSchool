@@ -3,6 +3,9 @@ export type Product = {
   name: string;
   en: string;
   category: string;
+  price?: number;
+  soldOut?: boolean;
+  unit?: "cup" | "piece";
   hot?: number;
   cold?: number;
   blend?: number;
@@ -121,16 +124,19 @@ export const initialProducts: Product[] = [
   ...group("น้ำผลไม้", [["orange-juice", "น้ำส้ม", "Orange Juice", null, 45]]),
 ];
 export const variants = (p: Product) =>
-  [
-    p.hot != null ? { id: "hot", label: "ร้อน", price: p.hot } : null,
-    p.cold != null ? { id: "cold", label: "เย็น", price: p.cold } : null,
-    p.blend != null ? { id: "blend", label: "ปั่น", price: p.blend } : null,
-  ].filter(Boolean) as { id: string; label: string; price: number }[];
+  p.price != null
+    ? [{ id: "regular", label: "ปกติ", price: p.price }]
+    : ([
+        p.hot != null ? { id: "hot", label: "ร้อน", price: p.hot } : null,
+        p.cold != null ? { id: "cold", label: "เย็น", price: p.cold } : null,
+        p.blend != null ? { id: "blend", label: "ปั่น", price: p.blend } : null,
+      ].filter(Boolean) as { id: string; label: string; price: number }[]);
 export const sweets = [0, 25, 50, 100, 150];
 export const basePrice = (p: Product) =>
   Math.min(...variants(p).map((v) => v.price));
 export function imageFor(p: Product) {
   if (p.image) return p.image;
+  if (p.price != null) return "/assets/logo.png";
   const c = p.category;
   return c === "กาแฟ"
     ? p.id === "orange-coffee"
