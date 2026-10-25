@@ -90,8 +90,7 @@ export default function App() {
     [ready, setReady] = useState(false),
     [error, setError] = useState(""),
     [login, setLogin] = useState(false),
-    [adminTab, setAdminTab] = useState("dashboard"),
-    [staffTab, setStaffTab] = useState("active"),
+    [adminTab, setAdminTab] = useState("orders"),
     [editing, setEditing] = useState<any>(null),
     [users, setUsers] = useState<any[]>([]),
     [reportDate, setReportDate] = useState(""),
@@ -151,8 +150,11 @@ export default function App() {
     if (location.pathname === "/login") setLogin(true);
     if (location.pathname === "/staff" || location.pathname === "/admin") {
       api("menu").then((d) => {
-        if (d.user) setView(location.pathname.slice(1));
-        else setLogin(true);
+        if (d.user) {
+          setView(d.user.role === "admin" ? "admin" : "staff");
+          setAdminTab("orders");
+          window.history.replaceState(null, "", "/admin");
+        } else setLogin(true);
       });
     }
     try {
@@ -333,7 +335,8 @@ export default function App() {
       notify("เฉพาะผู้ดูแลระบบ");
       return;
     }
-    setView(v);
+    setView(v === "staff" && user?.role === "admin" ? "admin" : v);
+    if (v === "staff" || v === "admin") setAdminTab("orders");
     setQuery("");
     window.scrollTo(0, 0);
   };
@@ -367,7 +370,8 @@ export default function App() {
           href="/"
           onClick={(e) => {
             e.preventDefault();
-            nav("shop");
+            if (view === "staff" || view === "admin") setAdminTab("orders");
+            else nav("shop");
           }}
         >
           <img src={config.logo} alt="OLD SCHOOL" />
@@ -381,48 +385,54 @@ export default function App() {
           </span>
         </a>
         <nav>
-          <button
-            className={view === "shop" ? "active" : ""}
-            onClick={() => nav("shop")}
-          >
-            เมนูเครื่องดื่ม
-          </button>
-          <button
-            className={view === "orders" ? "active" : ""}
-            onClick={() => nav("orders")}
-          >
-            ออเดอร์ของฉัน
-          </button>
-          {(view === "staff" || view === "admin") && (
+          {view === "staff" || view === "admin" ? (
             <>
               <button
-                className={view === "staff" ? "active" : ""}
-                onClick={() => nav("staff")}
+                className="active"
+                onClick={() => {
+                  setAdminTab("orders");
+                  window.scrollTo(0, 0);
+                }}
               >
-                สำหรับพนักงาน
+                หน้าทำงานร้าน
               </button>
-              {user?.role === "admin" && (
-                <button
-                  className={view === "admin" ? "active" : ""}
-                  onClick={() => nav("admin")}
-                >
-                  จัดการร้าน
-                </button>
-              )}
+              <a
+                className="customer-preview-link"
+                href="/"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                ดูหน้าลูกค้า ↗
+              </a>
+            </>
+          ) : (
+            <>
+              <button
+                className={view === "shop" ? "active" : ""}
+                onClick={() => nav("shop")}
+              >
+                เมนูเครื่องดื่ม
+              </button>
+              <button
+                className={view === "orders" ? "active" : ""}
+                onClick={() => nav("orders")}
+              >
+                ออเดอร์ของฉัน
+              </button>
             </>
           )}
         </nav>
-        <button
-          className="header-cart"
-          aria-label="เปิดตะกร้า"
-          onClick={() => {
-            setCartOpen(true);
-          }}
-        >
-          <ShoppingBag size={19} />
-          <span>ตะกร้าของฉัน</span>
-          <b>{count}</b>
-        </button>
+        {view !== "staff" && view !== "admin" && (
+          <button
+            className="header-cart"
+            aria-label="เปิดตะกร้า"
+            onClick={() => setCartOpen(true)}
+          >
+            <ShoppingBag size={19} />
+            <span>ตะกร้าของฉัน</span>
+            <b>{count}</b>
+          </button>
+        )}
       </header>
       {error && (
         <div className="error-banner">
@@ -568,12 +578,14 @@ export default function App() {
         </main>
       )}
       {(view === "staff" || view === "admin") && user && (
-        <main className="workspace">
+        <main className="workspace unified-workspace">
           <div className="workspace-heading">
             <div>
-              <div className="eyebrow">OLD SCHOOL / {view.toUpperCase()}</div>
-              <h1>{view === "staff" ? "เคาน์เตอร์ออเดอร์" : "จัดการร้าน"}</h1>
-              <p className="muted">สวัสดี {user.name} • อัปเดตทุก 4 วินาที</p>
+              <div className="eyebrow">OLD SCHOOL / WORKSPACE</div>
+              <h1>หน้าทำงานร้าน</h1>
+              <p className="muted">
+                สวัสดี {user.name} · รับออเดอร์ ชง และรับชำระเงินได้ที่นี่
+              </p>
             </div>
             <button
               className="secondary"
@@ -586,23 +598,62 @@ export default function App() {
               <LogOut size={16} /> ออกจากระบบ
             </button>
           </div>
-          {view === "staff" ? (
+          <div className="workspace-navigation">
+            <div
+              className="workspace-status-strip"
+              aria-label="ออเดอร์ที่กำลังดูแล"
+            >
+              {["waiting", "making", "ready"].map((status) => (
+                <button
+                  key={status}
+                  onClick={() => {
+                    setAdminTab("orders");
+                    window.scrollTo({ top: 0, behavior: "smooth" });
+                  }}
+                >
+                  <span className={"status " + status}>
+                    {statusNames[status]}
+                  </span>
+                  <b>{orders.filter((o) => o.status === status).length}</b>
+                </button>
+              ))}
+            </div>
+            <nav className="tabs workspace-tabs" aria-label="ส่วนงานร้าน">
+              {[
+                ["orders", "รับออเดอร์"],
+                ["history", "ประวัติออเดอร์"],
+                ...(user.role === "admin"
+                  ? [
+                      ["products", "เมนูสินค้า"],
+                      ["dashboard", "ยอดขาย"],
+                      ["categories", "หมวดหมู่"],
+                      ["tables", "โต๊ะ / QR"],
+                      ["reports", "รายงาน"],
+                      ["users", "พนักงาน"],
+                      ["settings", "ตั้งค่าร้าน"],
+                    ]
+                  : []),
+              ].map(([key, label]) => (
+                <button
+                  key={key}
+                  className={adminTab === key ? "chosen" : ""}
+                  aria-pressed={adminTab === key}
+                  onClick={() => setAdminTab(key)}
+                >
+                  {label}
+                  {key === "orders" &&
+                    orders.some((o) => o.status === "waiting") && (
+                      <span className="workspace-order-badge">
+                        {orders.filter((o) => o.status === "waiting").length}
+                      </span>
+                    )}
+                </button>
+              ))}
+            </nav>
+          </div>
+          {adminTab === "orders" || adminTab === "history" ? (
             <>
-              <div className="tabs">
-                {[
-                  ["active", "ออเดอร์ปัจจุบัน"],
-                  ["history", "ประวัติออเดอร์"],
-                ].map(([k, n]) => (
-                  <button
-                    className={staffTab === k ? "chosen" : ""}
-                    key={k}
-                    onClick={() => setStaffTab(k)}
-                  >
-                    {n}
-                  </button>
-                ))}
-              </div>
-              {staffTab === "active" ? (
+              {adminTab === "orders" ? (
                 <div className="kanban">
                   {["waiting", "making", "ready"].map((s) => (
                     <section key={s}>
@@ -625,28 +676,8 @@ export default function App() {
                 </div>
               )}
             </>
-          ) : (
+          ) : user.role === "admin" ? (
             <>
-              <div className="tabs admin-tabs">
-                {[
-                  ["dashboard", "ภาพรวม"],
-                  ["products", "เมนู"],
-                  ["categories", "หมวดหมู่"],
-                  ["tables", "โต๊ะ / QR"],
-                  ["orders", "ออเดอร์"],
-                  ["reports", "รายงาน"],
-                  ["users", "พนักงาน"],
-                  ["settings", "ตั้งค่าร้าน"],
-                ].map(([k, n]) => (
-                  <button
-                    key={k}
-                    className={adminTab === k ? "chosen" : ""}
-                    onClick={() => setAdminTab(k)}
-                  >
-                    {n}
-                  </button>
-                ))}
-              </div>
               {(adminTab === "dashboard" || adminTab === "reports") && (
                 <>
                   <div className="row filters">
@@ -935,11 +966,6 @@ export default function App() {
                   </div>
                 </div>
               )}
-              {adminTab === "orders" && (
-                <div className="order-list">
-                  {orders.map((o) => orderCard(o))}
-                </div>
-              )}
               {adminTab === "users" && (
                 <div className="panel">
                   <h2>บัญชีและสิทธิ์พนักงาน</h2>
@@ -1115,7 +1141,7 @@ export default function App() {
                 </form>
               )}
             </>
-          )}
+          ) : null}
         </main>
       )}
       {selected && (
@@ -1261,6 +1287,8 @@ export default function App() {
                   setUser(d.user);
                   setLogin(false);
                   setView(d.user.role === "admin" ? "admin" : "staff");
+                  setAdminTab("orders");
+                  window.history.replaceState(null, "", "/admin");
                 }
               } catch (e: any) {
                 notify(e.message);
