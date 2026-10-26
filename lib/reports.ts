@@ -102,3 +102,30 @@ export function summarizeSales(orders: any[]) {
   }
   return summary;
 }
+
+// Group by the same Bangkok order date used by report filters and totals.
+export function summarizeDailySales(
+  orders: any[],
+  range?: { from: string; to: string },
+) {
+  const groups = new Map<string, any[]>();
+  for (const order of orders) {
+    const date = bangkokDay(order.created);
+    if (!groups.has(date)) groups.set(date, []);
+    groups.get(date)!.push(order);
+  }
+  // Include zero-order days for a selected day/month or short range. Never allocate unbounded calendars.
+  if (range?.from && range.to) {
+    const from = Date.parse(range.from + "T00:00:00Z"),
+      to = Date.parse(range.to + "T00:00:00Z");
+    const days = Math.round((to - from) / 86400000) + 1;
+    if (days > 0 && days <= 366)
+      for (let time = from; time <= to; time += 86400000) {
+        const date = new Date(time).toISOString().slice(0, 10);
+        if (!groups.has(date)) groups.set(date, []);
+      }
+  }
+  return [...groups]
+    .sort(([a], [b]) => b.localeCompare(a))
+    .map(([date, rows]) => ({ date, ...summarizeSales(rows) }));
+}

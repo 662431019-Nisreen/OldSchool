@@ -12,7 +12,7 @@ import {
 import { newOrderPushStatement } from "@/lib/push-engine";
 import { env } from "cloudflare:workers";
 import { reportOrders } from "@/lib/report-server";
-import { summarizeSales } from "@/lib/reports";
+import { summarizeDailySales, summarizeSales } from "@/lib/reports";
 import { buildReceipt } from "@/lib/receipt";
 const json = (data: any, status = 200, headers: Record<string, string> = {}) =>
   Response.json(data, {
@@ -88,7 +88,11 @@ export async function GET(r: Request) {
       if (u?.role !== "admin") return json({ error: "เฉพาะผู้ดูแลระบบ" }, 403);
       try {
         const result = await reportOrders(url.searchParams);
-        return json({ ...result, summary: summarizeSales(result.orders) });
+        return json({
+          ...result,
+          summary: summarizeSales(result.orders),
+          daily: summarizeDailySales(result.orders, result.range),
+        });
       } catch (e: any) {
         return json({ error: e.message }, 400);
       }

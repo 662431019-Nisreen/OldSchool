@@ -3680,3 +3680,6 @@ td button,
   .receipt-paper { margin: 0 !important; box-shadow: none !important; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
   .receipt-paper[data-paper="a4"] { width: 100%; padding: 0; }
 }
+.report-day-link { background: transparent; color: #64421e; text-decoration: underline; text-underline-offset: 3px; border: 0; padding: 8px 0; white-space: nowrap; }
+.report-daily-panel tfoot { background: #f4eee4; font-weight: 600; }
+.report-daily-panel td, .report-daily-panel th { white-space: nowrap; }

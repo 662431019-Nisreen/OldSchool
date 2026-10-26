@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import * as XLSX from "xlsx";
+import XLSX from "xlsx";
 const base = "http://localhost:5173";
 const denied = await fetch(base + "/api/export");
 assert.equal(denied.status, 403);
@@ -25,6 +25,8 @@ const book = XLSX.read(buf, { type: "buffer" });
 const rows = XLSX.utils.sheet_to_json(book.Sheets.Orders);
 assert.ok(rows.length > 0);
 assert.ok(book.Sheets.Revisions);
+assert.ok(book.Sheets.RevisionItems);
+assert.equal(book.SheetNames[0], "DailySummary");
 const revisions = XLSX.utils.sheet_to_json(book.Sheets.Revisions);
 assert.ok(revisions.some((r) => r["ส่วนต่าง"] < 0));
 assert.ok(rows.some((r) => r["ช่องทางสั่ง"] === "หน้าร้าน"));
@@ -57,6 +59,29 @@ for (const o of orders) {
 assert.ok(revisions.some((r) => r["วิธี"] === "เงินสด"));
 assert.ok(revisions.some((r) => r["วิธี"] === "โอน"));
 
+for (const revision of revisions) {
+  for (const key of ["รายการก่อนแก้", "รายการหลังแก้"]) {
+    assert.equal(typeof revision[key], "string");
+    assert(!revision[key].includes('"productId"'));
+    assert(!revision[key].startsWith("[{"));
+  }
+}
+const revisionItems = XLSX.utils.sheet_to_json(book.Sheets.RevisionItems);
+assert.ok(revisionItems.length > 0);
+assert.ok(revisionItems.some((row) => row["รายการ"] === "ก่อนแก้"));
+assert.ok(revisionItems.some((row) => row["รายการ"] === "หลังแก้"));
+for (const item of revisionItems) {
+  assert.equal(typeof item["จำนวน"], "number");
+  assert.equal(typeof item["รวม"], "number");
+  assert.equal(item["จำนวน"] * item["ราคาต่อหน่วย"], item["รวม"]);
+}
+const zip = XLSX.CFB.read(buf, { type: "buffer" });
+const styles = zip.FileIndex.find((file) => file.name === "styles.xml");
+assert(styles);
+assert.match(
+  Buffer.from(styles.content).toString(),
+  /wrapText="true"|wrapText="1"/,
+);
 console.log(
   "PASS: Excel auth; valid XLSX; cash/transfer/unpaid labels match actual order payments; Thai correction payment methods.",
 );

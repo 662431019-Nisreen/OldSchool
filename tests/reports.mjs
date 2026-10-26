@@ -6,6 +6,7 @@ import {
   bangkokDay,
   paymentSplit,
   summarizeSales,
+  summarizeDailySales,
 } from "../lib/reports.ts";
 assert.equal(bangkokDay("2026-10-25T17:00:00.000Z"), "2026-10-26");
 assert.deepEqual(reportRange(new URLSearchParams({ date: "2026-10-26" })), {
@@ -85,6 +86,20 @@ for (const query of [
   assert.equal(response.status, 200);
   const data = await response.json();
   assert.deepEqual(data.summary, summarizeSales(data.orders));
+  assert.deepEqual(data.daily, summarizeDailySales(data.orders, data.range));
+  for (const field of [
+    "sales",
+    "cash",
+    "qr",
+    "pending",
+    "count",
+    "cups",
+    "pieces",
+  ])
+    assert.equal(
+      data.daily.reduce((n, d) => n + d[field], 0),
+      data.summary[field],
+    );
   for (const o of data.orders) {
     const day = bangkokDay(o.created);
     if (data.range.from) assert(day >= data.range.from && day <= data.range.to);
@@ -100,6 +115,40 @@ for (const query of [
   const book = XLSX.read(Buffer.from(await exported.arrayBuffer()), {
     type: "buffer",
   });
+  assert.equal(book.SheetNames[0], "DailySummary");
+  const daily = XLSX.utils.sheet_to_json(book.Sheets.DailySummary);
+  assert.deepEqual(
+    daily.map((row) => row["วันที่"]),
+    data.daily.map((day) => day.date),
+  );
+  assert.equal(
+    daily.reduce((n, row) => n + row["ยอดรับชำระสุทธิ"], 0),
+    data.summary.sales,
+  );
+  assert.equal(
+    daily.reduce((n, row) => n + row["เงินสดสุทธิ"], 0),
+    data.summary.cash,
+  );
+  assert.equal(
+    daily.reduce((n, row) => n + row["โอนสุทธิ"], 0),
+    data.summary.qr,
+  );
+  assert.equal(
+    daily.reduce((n, row) => n + row["ยอดรอชำระ"], 0),
+    data.summary.pending,
+  );
+  const expectedName = query.startsWith("date=")
+    ? "day-" + new URLSearchParams(query).get("date")
+    : query.startsWith("month=")
+      ? "month-" + month
+      : query
+        ? month + "-01-to-" + today
+        : "all";
+  assert.ok(
+    exported.headers
+      .get("content-disposition")
+      .includes("OLD-SCHOOL-sales-" + expectedName + ".xlsx"),
+  );
   const rows = XLSX.utils.sheet_to_json(book.Sheets.Orders);
   assert.deepEqual(
     rows.map((r) => r["ออเดอร์"]),
