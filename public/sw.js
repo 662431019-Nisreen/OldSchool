@@ -1,38 +1,112 @@
-self.addEventListener("install", () => self.skipWaiting());
-self.addEventListener("activate", (e) => e.waitUntil(self.clients.claim()));
-self.addEventListener("push", (e) =>
-  e.waitUntil(
+const CACHE = "old-school-pwa-v2";
+const SEEN = "old-school-push-seen-v1";
+self.addEventListener("install", (event) =>
+  event.waitUntil(
     (async () => {
-      let text = "เครื่องดื่มของคุณพร้อมรับแล้ว กรุณาตรวจสอบออเดอร์";
-      try {
-        const r = await fetch("/api/pos?action=mine", {
-          credentials: "include",
-        });
-        const d = await r.json();
-        const ready = d.orders?.filter((o) => o.status === "ready");
-        if (ready?.length)
-          text =
-            ready.map((o) => o.number).join(", ") + " พร้อมรับที่เคาน์เตอร์";
-      } catch {}
-      await self.registration.showNotification("OLD SCHOOL • พร้อมรับแล้ว", {
-        body: text,
-        icon: "/assets/icon-192.png",
-        badge: "/assets/icon-192.png",
-        tag: "order-ready",
-        data: { url: "/?view=orders" },
-      });
+      const cache = await caches.open(CACHE);
+      await cache.addAll([
+        "/offline.html",
+        "/assets/icon-192.png",
+        "/assets/icon-512.png",
+      ]);
+      await self.skipWaiting();
     })(),
   ),
 );
-self.addEventListener("notificationclick", (e) => {
-  e.notification.close();
-  e.waitUntil(
-    clients.matchAll({ type: "window" }).then((w) => {
-      if (w.length) {
-        w[0].navigate("/?view=orders");
-        return w[0].focus();
+self.addEventListener("activate", (event) =>
+  event.waitUntil(
+    (async () => {
+      for (const key of await caches.keys())
+        if (key.startsWith("old-school-pwa-") && key !== CACHE)
+          await caches.delete(key);
+      await self.clients.claim();
+    })(),
+  ),
+);
+// Never cache order APIs, admin pages or customer HTML. Offline cannot submit orders.
+self.addEventListener("fetch", (event) => {
+  if (event.request.mode === "navigate" && event.request.method === "GET")
+    event.respondWith(
+      fetch(event.request).catch(async () => {
+        return (await caches.match("/offline.html")) || Response.error();
+      }),
+    );
+});
+let pushWork = Promise.resolve();
+self.addEventListener("push", (event) => {
+  pushWork = pushWork
+    .catch(() => {})
+    .then(async () => {
+      let payload;
+      try {
+        payload = event.data?.json();
+      } catch {}
+      // Legacy payloadless pushes still show an honest generic status notification.
+      if (!payload)
+        payload = {
+          title: "☕ Old School Coffee",
+          body: "มีการอัปเดตออเดอร์ กรุณาตรวจสอบสถานะผ่านเว็บไซต์",
+          data: { url: "/?view=orders" },
+          tag: "old-school-status",
+        };
+      const eventId = payload.data?.eventId;
+      const seen = await caches.open(SEEN);
+      const marker = eventId
+        ? new Request(
+            self.location.origin +
+              "/__push_seen/" +
+              encodeURIComponent(eventId),
+          )
+        : null;
+      if (marker && (await seen.match(marker))) return;
+      await self.registration.showNotification("☕ Old School Coffee", {
+        body: payload.body,
+        icon: "/assets/icon-192.png",
+        badge: "/assets/icon-192.png",
+        tag: payload.tag || "old-school-status",
+        data: payload.data || { url: "/?view=orders" },
+        renotify: true,
+      });
+      if (marker) {
+        await seen.put(marker, new Response("seen"));
+        const keys = await seen.keys();
+        for (const k of keys.slice(0, Math.max(0, keys.length - 100)))
+          await seen.delete(k);
       }
-      return clients.openWindow("/?view=orders");
-    }),
+    });
+  event.waitUntil(pushWork);
+});
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  event.waitUntil(
+    (async () => {
+      let url = new URL("/?view=orders", self.location.origin);
+      try {
+        const candidate = new URL(
+          event.notification.data?.url,
+          self.location.origin,
+        );
+        if (
+          candidate.origin === self.location.origin &&
+          candidate.pathname === "/"
+        )
+          url = candidate;
+      } catch {}
+      const windows = await self.clients.matchAll({
+        type: "window",
+        includeUncontrolled: true,
+      });
+      // Keep the staff workspace intact; only reuse a customer window.
+      const existing = windows.find(
+        (w) =>
+          new URL(w.url).origin === url.origin &&
+          !/^\/(admin|staff)/.test(new URL(w.url).pathname),
+      );
+      if (existing) {
+        await existing.navigate(url.href);
+        return existing.focus();
+      }
+      return self.clients.openWindow(url.href);
+    })(),
   );
 });

@@ -1,89 +1,142 @@
 import { env } from "cloudflare:workers";
 import { DB } from "./server";
-const b64 = (b: Uint8Array) =>
-  btoa(String.fromCharCode(...b))
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=+$/, "");
-const decode = (s: string) =>
-  Uint8Array.from(
-    atob(
-      s.replace(/-/g, "+").replace(/_/g, "/") +
-        "=".repeat((4 - (s.length % 4)) % 4),
-    ),
-    (c) => c.charCodeAt(0),
-  );
-export async function notifyOwner(
-  owner: string,
-  _title: string,
-  _body: string,
-) {
-  const e = env as any;
-  if (!e.VAPID_PUBLIC_KEY || !e.VAPID_PRIVATE_KEY) return 0;
-  const pub = decode(e.VAPID_PUBLIC_KEY);
-  const key = await crypto.subtle.importKey(
-    "jwk",
-    {
-      kty: "EC",
-      crv: "P-256",
-      x: b64(pub.slice(1, 33)),
-      y: b64(pub.slice(33)),
-      d: e.VAPID_PRIVATE_KEY,
-    },
-    { name: "ECDSA", namedCurve: "P-256" },
-    false,
-    ["sign"],
-  );
-  const rows = await DB()
-    .prepare("SELECT id,value FROM subscriptions WHERE owner=?")
-    .bind(owner)
-    .all<any>();
-  let sent = 0;
-  for (const row of rows.results) {
-    try {
-      const s = JSON.parse(row.value);
-      const origin = new URL(s.endpoint).origin;
-      const allowed =
-        origin === "https://fcm.googleapis.com" ||
-        origin === "https://updates.push.services.mozilla.com" ||
-        new URL(s.endpoint).hostname.endsWith(".push.apple.com") ||
-        new URL(s.endpoint).hostname.endsWith(".notify.windows.com");
-      if (!allowed) continue;
-      const enc = new TextEncoder();
-      const body =
-        b64(enc.encode(JSON.stringify({ typ: "JWT", alg: "ES256" }))) +
-        "." +
-        b64(
-          enc.encode(
-            JSON.stringify({
-              aud: origin,
-              exp: Math.floor(Date.now() / 1000) + 3600,
-              sub:
-                e.VAPID_SUBJECT ||
-                "https://old-school-coffee.asdareen112001.chatgpt.site",
-            }),
-          ),
-        );
-      const sig = await crypto.subtle.sign(
-        { name: "ECDSA", hash: "SHA-256" },
-        key,
-        enc.encode(body),
-      );
-      const response = await fetch(s.endpoint, {
-        method: "POST",
-        headers: {
-          Authorization: `vapid t=${body}.${b64(new Uint8Array(sig))}, k=${e.VAPID_PUBLIC_KEY}`,
-          TTL: "120",
-          Urgency: "high",
-        },
-      });
-      if (response.ok) sent++;
-      if (response.status === 410 || response.status === 404)
-        await DB()
-          .prepare("DELETE FROM subscriptions WHERE id=?")
-          .bind(row.id)
-          .run();
-    } catch {}
+import { processPushEvent } from "./push-engine";
+import { validatePushKeys, type PushKeys } from "./webpush";
+let checked: Promise<PushKeys | null> | null = null;
+export function configuredPushKeys() {
+  if (!checked)
+    checked = (async () => {
+      const e = env as any;
+      const keys = {
+        publicKey: e.VAPID_PUBLIC_KEY,
+        privateKey: e.VAPID_PRIVATE_KEY,
+        subject: e.VAPID_SUBJECT,
+      };
+      if (!keys.publicKey || !keys.privateKey || !keys.subject) return null;
+      try {
+        await validatePushKeys(keys);
+        return keys;
+      } catch {
+        console.error("push_configuration_invalid");
+        return null;
+      }
+    })();
+  return checked;
+}
+export async function sendPushEvent(id: string) {
+  return processPushEvent(DB(), id, await configuredPushKeys());
+}
+let cleanupAt = 0;
+export async function drainPendingPush() {
+  const db = DB();
+  if (Date.now() > cleanupAt) {
+    cleanupAt = Date.now() + 86400000;
+    const cutoff = Date.now() - 30 * 86400000;
+    await db.batch([
+      db.prepare("DELETE FROM push_deliveries WHERE created<?").bind(cutoff),
+      db.prepare("DELETE FROM push_events WHERE created<?").bind(cutoff),
+      db
+        .prepare(
+          "DELETE FROM push_order_devices WHERE order_id IN(SELECT id FROM orders WHERE status='done') OR created<?",
+        )
+        .bind(cutoff),
+      db.prepare(
+        "DELETE FROM subscriptions WHERE NOT EXISTS(SELECT 1 FROM push_order_devices WHERE subscription_id=subscriptions.id)",
+      ),
+    ]);
   }
-  return sent;
+  const rows = await db
+    .prepare(
+      "SELECT id FROM push_events WHERE status='queued' ORDER BY created LIMIT 2",
+    )
+    .all<{ id: string }>();
+  for (const row of rows.results) await sendPushEvent(row.id);
+}
+export async function registerOrderPush(guest: string, raw: any, tokens: any) {
+  const { validateSubscription } = await import("./webpush");
+  const { deviceHash } = await import("./push-engine");
+  if (!(await configuredPushKeys()))
+    throw new Error("ระบบแจ้งเตือนยังไม่พร้อม ติดตามออเดอร์ผ่านเว็บไซต์ได้");
+  if (
+    !Array.isArray(tokens) ||
+    !tokens.length ||
+    tokens.length > 20 ||
+    tokens.some(
+      (t) => typeof t !== "string" || !/^[-a-zA-Z0-9]{20,80}$/.test(t),
+    )
+  )
+    throw new Error("กรุณาเลือกออเดอร์ที่จะรับแจ้งเตือน");
+  const subscription = await validateSubscription(raw),
+    db = DB();
+  const orders = await db
+    .prepare(
+      `SELECT id,token,status FROM orders WHERE token IN (${tokens.map(() => "?").join(",")}) AND status!='done'`,
+    )
+    .bind(...tokens)
+    .all<any>();
+  if (orders.results.length !== new Set(tokens).size)
+    throw new Error("ไม่พบออเดอร์หรือออเดอร์เสร็จสิ้นแล้ว");
+  const existing = await db
+    .prepare("SELECT owner FROM subscriptions WHERE id=?")
+    .bind(subscription.endpoint)
+    .first<{ owner: string }>();
+  if (existing && existing.owner !== guest)
+    throw new Error("อุปกรณ์นี้ผูกกับการใช้งานอื่น กรุณาลงทะเบียนอุปกรณ์ใหม่");
+  const ownerCount = await db
+    .prepare("SELECT count(*) AS n FROM subscriptions WHERE owner=?")
+    .bind(guest)
+    .first<{ n: number }>();
+  if (!existing && (ownerCount?.n || 0) >= 5)
+    throw new Error("ลงทะเบียนอุปกรณ์ครบแล้ว กรุณาใช้อุปกรณ์เดิม");
+  const hash = await deviceHash(subscription.endpoint),
+    now = Date.now();
+  const statements = [
+    db
+      .prepare(
+        "INSERT INTO subscriptions(id,owner,value) VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET value=excluded.value WHERE subscriptions.owner=excluded.owner",
+      )
+      .bind(subscription.endpoint, guest, JSON.stringify(subscription)),
+  ];
+  for (const o of orders.results) {
+    const count = await db
+      .prepare(
+        "SELECT count(*) AS n FROM push_order_devices WHERE order_id=? AND subscription_id!=?",
+      )
+      .bind(o.id, subscription.endpoint)
+      .first<{ n: number }>();
+    if ((count?.n || 0) >= 5)
+      throw new Error("ออเดอร์นี้ลงทะเบียนอุปกรณ์ครบแล้ว");
+    statements.push(
+      db
+        .prepare(
+          "INSERT OR IGNORE INTO push_order_devices(id,order_id,subscription_id,created) SELECT ?,?,?,? WHERE EXISTS(SELECT 1 FROM subscriptions WHERE id=? AND owner=?)",
+        )
+        .bind(
+          o.id + ":" + hash,
+          o.id,
+          subscription.endpoint,
+          now,
+          subscription.endpoint,
+          guest,
+        ),
+    );
+    statements.push(
+      db
+        .prepare(
+          "INSERT OR IGNORE INTO push_events(id,order_id,kind,created) SELECT ?,?,?,? WHERE EXISTS(SELECT 1 FROM orders WHERE id=? AND status='ready') AND EXISTS(SELECT 1 FROM push_order_devices WHERE id=?)",
+        )
+        .bind(
+          "late:" + o.id + ":" + hash,
+          o.id,
+          "automatic",
+          now,
+          o.id,
+          o.id + ":" + hash,
+        ),
+    );
+  }
+  const saved = await db.batch(statements);
+  if (!saved[0].meta.changes)
+    throw new Error("อุปกรณ์นี้ถูกลงทะเบียนในการใช้งานอื่นแล้ว");
+  return { ok: true, registered: orders.results.map((o) => o.token) };
 }

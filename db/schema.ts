@@ -40,3 +40,28 @@ export const subscriptions = sqliteTable("subscriptions", {
   owner: text("owner").notNull(),
   value: text("value").notNull(),
 });
+
+export const pushOrderDevices = sqliteTable("push_order_devices", {
+  id: text("id").primaryKey(),
+  orderId: integer("order_id").notNull(),
+  subscriptionId: text("subscription_id").notNull(),
+  created: integer("created").notNull(),
+});
+export const pushEvents = sqliteTable("push_events", {
+  id: text("id").primaryKey(),
+  orderId: integer("order_id").notNull(),
+  kind: text("kind").notNull(),
+  status: text("status").notNull().default("queued"),
+  created: integer("created").notNull(),
+  message: text("message").notNull().default(""),
+});
+export const pushDeliveries = sqliteTable("push_deliveries", {
+  id: text("id").primaryKey(),
+  eventId: text("event_id").notNull(),
+  orderId: integer("order_id").notNull(),
+  device: text("device").notNull(),
+  status: text("status").notNull(),
+  httpStatus: integer("http_status"),
+  error: text("error").notNull().default(""),
+  created: integer("created").notNull(),
+});

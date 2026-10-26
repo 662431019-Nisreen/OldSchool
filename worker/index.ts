@@ -3,7 +3,11 @@ import { runWithConnectorBinding } from "../lib/connector-context";
 import type { ConnectorBinding } from "../lib/connector-contract.mjs";
 
 const worker = {
-  fetch(request: Request, env: Cloudflare.Env, ctx: ExecutionContext<{ CONNECTORS?: ConnectorBinding }>) {
+  async fetch(
+    request: Request,
+    env: Cloudflare.Env,
+    ctx: ExecutionContext<{ CONNECTORS?: ConnectorBinding }>,
+  ) {
     let binding = ctx.props?.CONNECTORS;
     // Local preview emulates the same request-scoped capability. This branch and
     // the auxiliary service binding are absent from production builds.
@@ -12,18 +16,32 @@ const worker = {
       const expiresAt = Date.now() + 60_000;
       binding = {
         async getContext() {
-          if (Date.now() >= expiresAt) return { status: "request_context_expired" };
+          if (Date.now() >= expiresAt)
+            return { status: "request_context_expired" };
           return preview.getContext?.() ?? { status: "binding_unavailable" };
         },
         async invoke(connectorId, actionName, args) {
           if (Date.now() >= expiresAt) {
-            return { status: "request_context_expired", message: "This request has expired. Please try again." };
+            return {
+              status: "request_context_expired",
+              message: "This request has expired. Please try again.",
+            };
           }
           return preview.invoke(connectorId, actionName, args);
         },
       };
     }
-    return runWithConnectorBinding(binding, () => handler.fetch(request, env, ctx));
+    const response = await runWithConnectorBinding(binding, () =>
+      handler.fetch(request, env, ctx),
+    );
+    if (new URL(request.url).pathname === "/api/pos") {
+      ctx.waitUntil(
+        import("../lib/push")
+          .then(({ drainPendingPush }) => drainPendingPush())
+          .catch(() => console.error("push_queue_check_failed")),
+      );
+    }
+    return response;
   },
 };
 

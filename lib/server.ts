@@ -116,3 +116,11 @@ export function unpack(o: any) {
     payload: undefined,
   };
 }
+
+export function publicOrder(row: any) {
+  const o = unpack(row);
+  delete o.revisions;
+  delete o.createdBy;
+  delete o.adjustmentReason;
+  return o;
+}

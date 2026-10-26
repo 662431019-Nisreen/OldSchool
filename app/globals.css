@@ -3398,3 +3398,154 @@ td button,
     gap: 8px;
   }
 }
+
+.push-panel {
+  background: #f4eee5;
+  border: 1px solid #e6d9c8;
+  border-radius: 14px;
+  padding: 20px;
+  margin: 22px 0;
+}
+.push-panel-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.push-panel-heading > svg {
+  color: #80582c;
+  flex: none;
+  margin-top: 3px;
+}
+.push-panel p {
+  font-size: 13px;
+  line-height: 1.8;
+}
+.push-panel .primary {
+  margin: 8px 0;
+  justify-content: center;
+}
+.push-feedback {
+  padding: 10px 12px;
+  background: white;
+  border-radius: 8px;
+  margin: 10px 0;
+}
+.pwa-warning {
+  color: #795025;
+  background: #fff6e8;
+  padding: 12px;
+  border-radius: 8px;
+  line-height: 1.8;
+  font-size: 13px;
+}
+.pwa-guide {
+  margin: 14px 0;
+}
+.pwa-guide h3 {
+  margin-bottom: 12px;
+}
+.pwa-guide .muted {
+  font-size: 13px;
+  line-height: 1.8;
+}
+.push-panel details > summary,
+.push-log > summary {
+  cursor: pointer;
+  color: #73502c;
+  font-size: 13px;
+}
+.push-log {
+  margin: 14px 0;
+  font-size: 12px;
+}
+.push-log p {
+  line-height: 1.7;
+  margin: 8px 0;
+}
+.push-log > div {
+  border-top: 1px solid #ece2d5;
+  padding: 10px 0;
+}
+.push-log small {
+  display: block;
+  color: #827364;
+  margin-top: 4px;
+}
+.push-log button {
+  padding: 7px 10px;
+  margin-top: 8px;
+}
+.customer-queue-number {
+  font-size: clamp(30px, 8vw, 42px);
+  letter-spacing: 1px;
+}
+@media (max-width: 600px) {
+  .push-panel {
+    padding: 16px;
+  }
+  .push-panel .primary {
+    width: 100%;
+    font-size: 13px;
+  }
+  .push-panel-heading b {
+    font-size: 15px;
+  }
+}
+.tracking-import {
+  font-size: 13px;
+  margin: 14px 0;
+  color: #745632;
+}
+.tracking-import summary {
+  cursor: pointer;
+}
+.tracking-import p {
+  margin: 10px 0;
+  line-height: 1.7;
+}
+.tracking-import form {
+  display: flex;
+  align-items: end;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+.tracking-import label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  flex: 1;
+  min-width: 0;
+}
+.tracking-import input {
+  padding: 10px;
+  border: 1px solid #dcd1c3;
+  border-radius: 8px;
+  font: inherit;
+  width: 100%;
+  min-width: 0;
+}
+.tracking-import button {
+  white-space: nowrap;
+}
+.tracking-link-fallback {
+  font-size: 12px;
+  color: #7e684e;
+  margin: 10px 0;
+}
+.tracking-link-fallback summary {
+  cursor: pointer;
+}
+.tracking-link-fallback p {
+  font-size: 12px;
+  line-height: 1.7;
+}
+.tracking-link-fallback input {
+  width: 100%;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid #dcd1c3;
+  border-radius: 8px;
+  font: inherit;
+  background: #fff;
+}

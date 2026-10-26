@@ -4,6 +4,9 @@ import { api, money, statusNames } from "@/lib/client";
 import Storefront from "@/components/pos/Storefront";
 import CartItem from "@/components/pos/CartItem";
 import ProductDialog from "@/components/pos/ProductDialog";
+import PushPanel from "@/components/pos/PushPanel";
+import PushLog from "@/components/pos/PushLog";
+import PwaInstallGuide from "@/components/pos/PwaInstallGuide";
 import SalesReport from "@/components/pos/SalesReport";
 import OrderEditor from "@/components/pos/OrderEditor";
 import TableQr from "@/components/pos/TableQr";
@@ -98,6 +101,8 @@ export default function App() {
     [idem, setIdem] = useState(""),
     [setup, setSetup] = useState(false),
     [editingLine, setEditingLine] = useState<string | null>(null);
+  const [focusedToken, setFocusedToken] = useState("");
+  const [trackingLink, setTrackingLink] = useState("");
   const [orderEditor, setOrderEditor] = useState<any>(null);
   const notify = (s: string) => {
     setToast(s);
@@ -139,11 +144,29 @@ export default function App() {
       setOrderType(context.type);
       setTable(context.type === "takeaway" ? 0 : context.table);
       sessionStorage.setItem("os_order_context", JSON.stringify(context));
+      const manifest = document.querySelector<HTMLLinkElement>(
+        'link[rel="manifest"]',
+      );
+      if (manifest)
+        manifest.href =
+          "/api/manifest?" +
+          (context.type === "takeaway"
+            ? "type=takeaway"
+            : "table=" + context.table);
     } else {
       setTable(0);
       sessionStorage.removeItem("os_order_context");
     }
     if (p.get("view") === "orders") setView("orders");
+    const openTracked = () => {
+      const match = location.hash.match(/^#order=([-a-zA-Z0-9]{20,80})$/);
+      if (match) {
+        setFocusedToken(match[1]);
+        setView("orders");
+      }
+    };
+    openTracked();
+    window.addEventListener("hashchange", openTracked);
     if (location.pathname === "/install") setView("install");
     if (location.pathname === "/cart" || location.pathname === "/checkout") {
       setCartOpen(true);
@@ -165,7 +188,10 @@ export default function App() {
       localStorage.setItem("os_idem", saved);
     } catch {}
     if ("serviceWorker" in navigator)
-      navigator.serviceWorker.register("/sw.js").catch(() => {});
+      navigator.serviceWorker
+        .register("/sw.js", { scope: "/", updateViaCache: "none" })
+        .catch(() => {});
+    return () => window.removeEventListener("hashchange", openTracked);
   }, []);
   useEffect(() => {
     localStorage.setItem("os_cart", JSON.stringify(cart));
@@ -177,7 +203,15 @@ export default function App() {
         const d = await api(
           user && (view === "staff" || view === "admin") ? "orders" : "mine",
         );
-        setOrders(d.orders || []);
+        let next = d.orders || [];
+        if (focusedToken && view !== "admin" && view !== "staff") {
+          const tracked = await api("track", { token: focusedToken });
+          next = [
+            tracked.order,
+            ...next.filter((o: any) => o.token !== tracked.order.token),
+          ];
+        }
+        setOrders(next);
         setError("");
       } catch (e: any) {
         setError(e.message);
@@ -186,7 +220,7 @@ export default function App() {
     refresh();
     const id = setInterval(refresh, 4000);
     return () => clearInterval(id);
-  }, [view, user, ready]);
+  }, [view, user, ready, focusedToken]);
   useEffect(() => {
     if (view === "admin" && user?.role === "admin")
       api("admin")
@@ -289,13 +323,13 @@ export default function App() {
     setBusy(true);
     try {
       const d = await api(action, data);
-      if (action === "call")
+      if (action === "call" || d.push) {
         notify(
-          d.sent
-            ? "ส่งแจ้งเตือนแล้ว"
-            : "ยังไม่มีอุปกรณ์ที่รับ Push ได้ ลูกค้าดูสถานะบนเว็บได้",
+          d.push?.accepted
+            ? "บริการ Push รับคำขอแล้ว ตรวจผลได้ที่ผลการแจ้งเตือน"
+            : "บันทึกแล้ว ตรวจสถานะส่งได้ที่ผลการแจ้งเตือน ลูกค้าติดตามบนเว็บได้",
         );
-      else notify("บันทึกเรียบร้อย");
+      } else notify("บันทึกเรียบร้อย");
       if (action === "config") {
         await load();
         if (user?.role === "admin") {
@@ -315,37 +349,6 @@ export default function App() {
     }
   };
   const saveConfig = async (c: any) => mutate("config", { config: c });
-  const enablePush = async () => {
-    try {
-      if (!("PushManager" in window) || !("Notification" in window)) {
-        notify("อุปกรณ์นี้ยังใช้ Push ไม่ได้ ติดตามสถานะผ่านหน้านี้ได้");
-        return;
-      }
-      const { key } = await api("push-key");
-      if (!key) {
-        notify("ระบบ Push ยังรอตั้งค่าจากผู้ดูแล ติดตามสถานะผ่านเว็บได้");
-        return;
-      }
-      const permission = await Notification.requestPermission();
-      if (permission !== "granted") {
-        notify("ยังไม่ได้อนุญาตแจ้งเตือน ติดตามสถานะผ่านเว็บได้");
-        return;
-      }
-      const sw = await navigator.serviceWorker.ready;
-      const raw = atob(
-        key.replace(/-/g, "+").replace(/_/g, "/") +
-          "=".repeat((4 - (key.length % 4)) % 4),
-      );
-      const sub = await sw.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: Uint8Array.from(raw, (c) => c.charCodeAt(0)),
-      });
-      await api("subscribe", { subscription: sub.toJSON() });
-      notify("เปิดรับแจ้งเตือนแล้ว");
-    } catch (e: any) {
-      notify("เปิดแจ้งเตือนไม่สำเร็จ: " + e.message);
-    }
-  };
   const nav = (v: string) => {
     if ((v === "staff" || v === "admin") && !user) {
       setLogin(true);
@@ -471,14 +474,65 @@ export default function App() {
         <main className="workspace narrow">
           <div className="eyebrow">YOUR LITTLE COFFEE MOMENT</div>
           <h1>ออเดอร์ของฉัน</h1>
-          <div className="notice">
-            <Bell />
-            <div>
-              <b>ไม่พลาดเมื่อแก้วโปรดพร้อมรับ</b>
-              <p>เปิดรับแจ้งเตือน หรือเปิดหน้านี้ไว้เพื่อติดตามสถานะ</p>
-            </div>
-            <button onClick={enablePush}>เปิดแจ้งเตือน</button>
-          </div>
+          <details className="tracking-import">
+            <summary>มีลิงก์ติดตามจาก Safari หรืออุปกรณ์นี้?</summary>
+            <p>วางลิงก์ส่วนตัวเพื่อเปิดออเดอร์เดิมในแอปบนหน้าจอโฮม</p>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                try {
+                  const u = new URL(trackingLink);
+                  const match = u.hash.match(/^#order=([-a-zA-Z0-9]{20,80})$/);
+                  if (u.origin !== location.origin || !match) throw new Error();
+                  setFocusedToken(match[1]);
+                  history.replaceState(null, "", "/?view=orders" + u.hash);
+                  setTrackingLink("");
+                } catch {
+                  notify("กรุณาวางลิงก์ติดตามจากเว็บไซต์ร้านนี้ให้ครบ");
+                }
+              }}
+            >
+              <label>
+                ลิงก์ติดตามออเดอร์
+                <input
+                  type="url"
+                  required
+                  value={trackingLink}
+                  onChange={(e) => setTrackingLink(e.target.value)}
+                  placeholder="วางลิงก์ที่คัดลอกไว้"
+                />
+              </label>
+              <button className="secondary">เปิดออเดอร์</button>
+            </form>
+          </details>
+          {focusedToken && (
+            <button
+              className="text-button"
+              onClick={() => {
+                setFocusedToken("");
+                history.replaceState(
+                  null,
+                  "",
+                  location.pathname + location.search,
+                );
+              }}
+            >
+              ดูออเดอร์ทั้งหมดของอุปกรณ์นี้
+            </button>
+          )}
+          <PushPanel
+            orders={
+              focusedToken
+                ? orders.filter((o) => o.token === focusedToken)
+                : orders
+            }
+          />
+          {focusedToken && error && (
+            <p className="pwa-warning">
+              ไม่สามารถโหลดออเดอร์จากลิงก์นี้ได้
+              กรุณาตรวจลิงก์หรือเชื่อมต่ออินเทอร์เน็ต
+            </p>
+          )}
           {!orders.length ? (
             <div className="empty">
               <ShoppingBag size={40} />
@@ -489,12 +543,15 @@ export default function App() {
               </button>
             </div>
           ) : (
-            orders.map((o) => (
+            (focusedToken
+              ? orders.filter((o) => o.token === focusedToken)
+              : orders
+            ).map((o) => (
               <article className="order-detail" key={o.id}>
                 <div className="row">
                   <div>
                     <small>หมายเลขออเดอร์</small>
-                    <h2>{o.number}</h2>
+                    <h2 className="customer-queue-number">{o.number}</h2>
                   </div>
                   <span className={"status " + o.status}>
                     {statusNames[o.status]}
@@ -506,6 +563,39 @@ export default function App() {
                     : "รับกลับบ้าน"}{" "}
                   · {new Date(o.created).toLocaleString("th-TH")}
                 </p>
+                <button
+                  className="text-button"
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(
+                        location.origin + "/?view=orders#order=" + o.token,
+                      );
+                      notify(
+                        "คัดลอกลิงก์แล้ว เก็บไว้ส่วนตัว ผู้ที่มีลิงก์ดูออเดอร์นี้ได้",
+                      );
+                    } catch {
+                      notify(
+                        "คัดลอกอัตโนมัติไม่ได้ กดแสดงลิงก์ติดตามส่วนตัวแล้วคัดลอกเองได้",
+                      );
+                    }
+                  }}
+                >
+                  คัดลอกลิงก์ติดตามออเดอร์
+                </button>
+                <details className="tracking-link-fallback">
+                  <summary>แสดงลิงก์ติดตามส่วนตัวเพื่อคัดลอกเอง</summary>
+                  <p>เก็บลิงก์นี้เป็นส่วนตัว ผู้มีลิงก์สามารถดูออเดอร์นี้ได้</p>
+                  <input
+                    aria-label={"ลิงก์ส่วนตัว " + o.number}
+                    readOnly
+                    value={
+                      (typeof location !== "undefined" ? location.origin : "") +
+                      "/?view=orders#order=" +
+                      o.token
+                    }
+                    onFocus={(e) => e.currentTarget.select()}
+                  />
+                </details>
                 <div className="progress">
                   {Object.entries(statusNames).map(([k, n], i) => (
                     <div
@@ -576,20 +666,7 @@ export default function App() {
           </button>
           <h1>พกร้านไว้บนหน้าจอ</h1>
           <div className="panel">
-            <h2>เพิ่มลงหน้าจอโฮมบน iPhone</h2>
-            <ol className="steps">
-              <li>เปิดเว็บไซต์ร้านด้วย Safari</li>
-              <li>กดปุ่มแชร์ แล้วเลือก “เพิ่มไปยังหน้าจอโฮม”</li>
-              <li>กด “เพิ่ม” และเปิด OLD SCHOOL จากไอคอนใหม่</li>
-              <li>สั่งเครื่องดื่ม แล้วกด “เปิดแจ้งเตือน” ในหน้าออเดอร์</li>
-            </ol>
-            <p>
-              Web Push บน iPhone ต้องใช้ iOS 16.4
-              ขึ้นไปและเปิดจากเว็บแอปที่เพิ่มบนหน้าจอโฮม
-            </p>
-            <button className="primary" onClick={enablePush}>
-              <Bell size={17} /> เปิดแจ้งเตือน
-            </button>
+            <PwaInstallGuide />
           </div>
           <div className="panel">
             <h3>หากเปิดแจ้งเตือนไม่ได้</h3>
@@ -1727,6 +1804,7 @@ export default function App() {
             ))}
           </details>
         )}
+        <PushLog id={o.id} />
         <div className="staff-actions">
           {(o.payment !== "paid" || user?.role === "admin") && (
             <button

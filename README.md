@@ -47,7 +47,7 @@ Integration test เขียนออเดอร์และบัญชีท
 
 - `lib/catalog.ts`: เมนูจริง 42 รายการ ราคา รูปแบบ และข้อมูลเริ่มต้น
 - `lib/server.ts`: ฐานข้อมูล guest/session auth, PBKDF2 และการตรวจราคาตะกร้า
-- `lib/push.ts`: VAPID signing และส่ง Web Push แบบไม่มี payload; Service Worker ดึงสถานะด้วยสิทธิ์ของเจ้าของอุปกรณ์
+- `lib/push.ts`: มาตรฐาน Web Push พร้อม payload เข้ารหัส RFC 8291, VAPID และ durable outbox ผูกอุปกรณ์กับออเดอร์
 - `lib/client.ts`: API client และรูปแบบข้อมูลแสดงผล
 - `components/pos/`: หน้าร้าน กล่องเลือกสินค้า และ QR โต๊ะ
 - `app/page.tsx`: state และหน้าจอการทำงานของแต่ละบทบาท
@@ -90,11 +90,57 @@ D1 แยก orders, users, sessions, audit และ subscriptions ส่วน
 
 ## Web Push และ PWA
 
-ตั้งค่า `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` (JWK private `d`) และ `VAPID_SUBJECT` เป็น HTTPS URL หรือ mailto ของร้าน ห้ามใส่ private key ใน client/public
+ใช้มาตรฐาน Web Push บน Cloudflare Workers ผ่าน WebCrypto ไม่ต้องมีบัญชี Firebase หรือ Apple Developer เพิ่ม และไม่มี Service Account ใน frontend
 
-Push ต้องใช้ HTTPS และลูกค้าอนุญาต บน iPhone ต้องเพิ่มเว็บลงหน้าจอโฮมและเปิดจากไอคอนก่อน (iOS 16.4+) อุปกรณ์ที่ไม่รองรับยังติดตามผ่านเว็บไซต์ได้ทุก 4 วินาที ระบบไม่รับออเดอร์ออฟไลน์ และ Service Worker ไม่ cache ข้อมูลออเดอร์ส่วนตัว
+- `VAPID_PUBLIC_KEY`: P-256 uncompressed public key (base64url 65 bytes)
+- `VAPID_PRIVATE_KEY`: private JWK `d` (base64url 32 bytes), ต้องเป็น secret ฝั่ง Server เท่านั้น
+- `VAPID_SUBJECT`: HTTPS URL ของร้าน หรือ `mailto:` ที่ติดต่อได้
+- ทั้งสามค่ามีอยู่ในโฮสต์แล้ว API `push-key` ตรวจลายเซ็นคู่คีย์จริงก่อนรายงาน configured=true และส่งเฉพาะ public key
+- ห้ามเปลี่ยน key pair โดยไม่จำเป็น เพราะ subscription เดิมจะใช้คีย์เก่า หากเปลี่ยน ลูกค้าต้องเปิดรับแจ้งเตือนใหม่
 
-Checkout นี้สร้าง VAPID keys แล้วและตั้งค่าใน hosted environment แต่ยังต้องทดสอบการส่งถึง iPhone/Android เครื่องจริงก่อนรับลูกค้า ไม่ได้ยืนยันการส่ง Push ถึงอุปกรณ์จาก browser QA
+Manifest ตั้งชื่อ Old School Coffee และใช้ไอคอน 192/512 พร้อม apple-touch-icon ส่วน Service Worker เก็บเฉพาะหน้าบอกออฟไลน์กับไอคอน ไม่ cache API, HTML ลูกค้า หรือหน้าแอดมิน และไม่ส่งออเดอร์ออฟไลน์
+
+ลูกค้ากดเปิดรับแจ้งเตือนในหน้าติดตาม จึงขอ Notification permission, สร้าง browser subscription และบันทึกคู่กับ tracking token ของออเดอร์ Server ยืนยันลงทะเบียนก่อน UI แสดงสำเร็จ การอนุญาตอย่างเดียวไม่ถือว่าลงทะเบียนสำเร็จ iPhone/iPad ต้องติดตั้งจากเมนูแชร์ลงหน้าจอโฮมและเปิดจากไอคอนก่อน (iOS/iPadOS 16.4+) หากเปิดใน LINE/Messenger จะแนะนำเปิด Safari/Chrome และยังติดตามผ่านเว็บได้
+
+Manifest แบบมี QR context ที่ `/api/manifest?table=N` หรือ `?type=takeaway` คงเลขโต๊ะ/กลับบ้านใน start_url ขณะติดตั้ง และใช้ id เดียวกันเสมอ หาก Safari กับ Home Screen แยก cookie ลูกค้าคัดลอกลิงก์ติดตามไว้ แล้วเปิดแอป → ออเดอร์ของฉัน → วางลิงก์ส่วนตัว เพื่อเปิดออเดอร์เดิมและลงทะเบียน Push โดยไม่ต้องสั่งซ้ำ
+
+### ส่งและตรวจผล
+
+เมื่อสถานะเปลี่ยนเป็น ready: update version และ insert `push_events` อยู่ใน D1 batch เดียวกัน ตัวส่ง claim งานเพียงครั้งเดียวและ claim `push_deliveries` แบบ unique ต่อออเดอร์/อุปกรณ์สำหรับการส่งอัตโนมัติ การลงทะเบียนหลังพร้อมรับส่งได้ครั้งเดียวเช่นกัน Manual call สร้าง event ใหม่โดยเว้น 30 วินาทีแบบ atomic
+
+ส่ง payload AES-128-GCM พร้อมหมายเลขออเดอร์และลิงก์ติดตามใน URL fragment ให้ SW แสดงได้โดยไม่ fetch cookie ระหว่าง background แตะแจ้งเตือนแล้วเปิดออเดอร์เฉพาะรายการ ไม่แทนที่แท็บ staff/admin ลิงก์ที่คัดลอกเป็น bearer capability: **เก็บเป็นส่วนตัว ผู้มีลิงก์สามารถดูออเดอร์นั้นได้** ตัวเลขออเดอร์อย่างเดียวใช้เข้าถึงไม่ได้
+
+Subscription เก่าที่ไม่มีการผูกออเดอร์ต้องกดลงทะเบียนใหม่ Web Push endpoint จำกัดเฉพาะผู้ให้บริการที่รองรับ, ไม่ตาม redirect, ตรวจ ECDH/auth keys และลบ 404/410 หรือ expirationTime หมดอายุ ตาราง logs ไม่บันทึก endpoint/keys/token ในข้อความ รายการสำเร็จแสดง `accepted` หมายถึง push service รับคำขอ ไม่ใช่หลักฐานว่ามือถือแสดง/อ่านแล้ว พนักงานเปิด “ผลการแจ้งเตือน” ใต้การ์ดออเดอร์ได้
+
+งาน queued ถูกดำเนินการใน request ที่เปลี่ยนสถานะและมี request-driven `waitUntil` สำหรับเก็บงานค้างเมื่อมีการเรียก API ครั้งถัดไป ไม่มี cron retry; กรณีส่งแล้ว timeout อาจทราบผลไม่ได้ จึงไม่ retry อัตโนมัติเพื่อลดการแจ้งซ้ำ พนักงานตรวจ log และเรียกซ้ำเองได้ งานที่ค้าง `sending` หลัง Worker ถูกตัดไม่ส่งซ้ำเองโดยไม่มีหลักฐาน การทำความสะอาดตามคำขอ API วันละครั้งเก็บ log 30 วันและล้าง binding ของออเดอร์จบ/เกิน 30 วัน รวม subscription ที่ไม่มี binding
+
+### ไฟล์ระบบ PWA/Push
+
+- `public/manifest.webmanifest`, `app/api/manifest/route.ts`, `app/layout.tsx`: ชื่อแอป, scope, start URL จาก QR, ไอคอนและ Apple metadata (ใช้ไอคอนร้านเดิม 192/512)
+- `public/sw.js`, `public/offline.html`: notification display/click, event dedupe และหน้าบอกออฟไลน์
+- `components/pos/PushPanel.tsx`, `PwaInstallGuide.tsx`, `PushLog.tsx`, `app/page.tsx`: ลงทะเบียนเมื่อกด ตรวจ support/permission คำแนะนำติดตั้ง นำเข้าลิงก์ และผลส่งฝั่งพนักงาน
+- `lib/webpush.ts`: payload encryption, VAPID signing, endpoint/key validation
+- `lib/push.ts`, `lib/push-engine.ts`, `worker/index.ts`: ผูกอุปกรณ์กับออเดอร์ durable event/delivery claims และ background processing
+- `app/api/pos/route.ts`, `lib/server.ts`: สิทธิ์ติดตาม token, API subscribe/registration/logs และ atomic status update + outbox
+- `db/schema.ts`, `drizzle/0001_icy_silver_centurion.sql`, `drizzle/meta/0001_snapshot.json`, `drizzle/meta/_journal.json`: เพิ่มตาราง push_events, push_deliveries, push_order_devices โดยไม่เปลี่ยน/ลบออเดอร์เดิม
+- `app/globals.css`: รูปแบบปุ่ม/ข้อความ คิว ลิงก์ติดตามและ log
+- `tests/webpush.mjs`, `tests/push-system.mjs`, `tests/service-worker.mjs`, `tests/pwa-routes.mjs`: crypto, API/SQLite/transport จำลอง, SW events, route/config checks
+
+สำหรับ preview ใช้ `npm start -- --port 5173 --env-file /absolute/path/to/.dev.vars` เพื่อให้ Wrangler โหลดค่าจากไฟล์ local โดยไม่คัดลอก secret เข้า dist หรือซอร์ส
+
+### ทดสอบอุปกรณ์จริง (ยังต้องทำโดยเจ้าของร้าน)
+
+1. iPhone/iPad: เปิด Safari → แชร์ → เพิ่มไปยังหน้าจอโฮม → เปิดจากไอคอน ก่อนสั่ง; Android ใช้ Chrome และอนุญาตแจ้งเตือน
+2. สแกน QR โต๊ะจริง สั่งเมนู จดเลขคิว แล้วกดเปิดรับการแจ้งเตือน (ต้องเห็นยืนยันลงทะเบียนออเดอร์ ไม่ใช่แค่อนุญาต)
+3. ปิดหน้า/สลับออกจากแอปและล็อกจอ ใช้อีกเครื่องเปิด staff เริ่มทำ → พร้อมรับ
+4. ตรวจ notification ชื่อ ☕ Old School Coffee และเลขคิวตรงกัน จากนั้นแตะเพื่อเปิดเฉพาะออเดอร์นั้น
+5. ตรวจผลการแจ้งเตือนจาก staff ไม่ควรมี automatic accepted ซ้ำอุปกรณ์เดิม กดเรียกเองหนึ่งครั้งแล้วตรวจว่าเรียกซ้ำภายใน 30 วินาทีถูกป้องกัน
+6. ทดลองอีกลูกค้าคนละอุปกรณ์และเลขโต๊ะ ต้องไม่รับคิวของกันและกัน ปฏิเสธ permission แล้วยังสั่ง/ติดตามเว็บได้
+7. ตรวจ Settings > Notifications, Focus/Do Not Disturb, อินเทอร์เน็ต และข้อจำกัดแบตเตอรี่ หากไม่เห็นแจ้งเตือน
+
+การทดสอบอัตโนมัติใช้ปลายทาง Push จำลองเท่านั้น ไม่ได้ยืนยันการรับจริงบน Android/iPhone; browser QA ไม่เทียบเท่า physical-device test
+
+ทดสอบ: `node --experimental-strip-types tests/webpush.mjs`, `node --experimental-strip-types tests/push-system.mjs`, `node tests/service-worker.mjs` และชุด integration เดิมเมื่อเปิด localhost (apply migrations ใหม่ก่อน)
 
 ## ก่อนใช้หน้าร้านจริง
 
@@ -102,14 +148,14 @@ Checkout นี้สร้าง VAPID keys แล้วและตั้ง�
 2. ตรวจเมนู/ความหวานและราคาอีกครั้ง เมนูแนะนำเป็นชุดเสนอเริ่มต้น
 3. เปลี่ยนภาพประกอบเป็นภาพสินค้า/หน้าร้านจริง และตั้งเวลาเปิด–ปิด (เริ่มต้น 08:00–18:00)
 4. ตั้งจำนวนโต๊ะจริง (เริ่มต้น 12) อัปโหลด QR ธนาคาร และทดสอบชำระกับพนักงาน
-5. เปิดสิทธิ์เว็บไซต์สาธารณะจึงใช้กับลูกค้าที่ไม่สมัครสมาชิกได้ ขณะส่งมอบ Site เป็นส่วนตัวให้เจ้าของตรวจสอบ
+5. เปิดสิทธิ์เว็บไซต์สาธารณะจึงใช้กับลูกค้าที่ไม่สมัครสมาชิกได้ เว็บปัจจุบันเปิดให้ลูกค้าเข้าถึงแบบสาธารณะแล้ว ส่วนหน้าทำงานร้านยังต้องเข้าสู่ระบบ
 6. ทดสอบ Push บนเครื่องจริงและพิมพ์ QR จากโดเมนที่ใช้งานจริง
 
 ไม่มีการเชื่อมบริการเรียกเก็บเงินรายเดือนเพิ่มเอง แต่โฮสต์/ฐานข้อมูล/พื้นที่เก็บรูปอาจมีค่าใช้จ่ายตามโควตาและเงื่อนไขผู้ให้บริการ
 
 ## ภาพประกอบ
 
-โลโก้จากไฟล์ที่เจ้าของร้านส่ง รูปกาแฟ/เครื่องดื่มประกอบจาก Unsplash (ดาวน์โหลดเป็น assets) ไม่ใช่ภาพสินค้าจริงของร้าน หน้าลูกค้าระบุ “ภาพประกอบ” ไว้ทุกการ์ด
+โลโก้จากไฟล์ที่เจ้าของร้านส่ง รูปกาแฟ/เครื่องดื่มประกอบจาก Unsplash (ดาวน์โหลดเป็น assets) ไม่ใช่ภาพสินค้าจริงของร้าน รูปเริ่มต้นเป็นภาพประกอบ เจ้าของร้านเปลี่ยนเป็นรูปสินค้าจริงได้
 
 ### ออเดอร์หน้าร้านและการแก้ไข
 - หน้าทำงานร้าน → เพิ่มออเดอร์หน้าร้าน รับรายการสั่งปากเปล่า เลือกโต๊ะหรือกลับบ้าน และบันทึกเข้าคิวเดียวกับ QR
