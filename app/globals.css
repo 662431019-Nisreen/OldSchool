@@ -3578,3 +3578,6 @@ td button,
 .customer-notification-option { margin: 16px 0; }
 .customer-notification-option > summary { color: #756957; font-size: 14px; cursor: pointer; padding: 8px 0; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+.report-day-link { background: transparent; color: #64421e; text-decoration: underline; text-underline-offset: 3px; border: 0; padding: 8px 0; white-space: nowrap; }
+.report-daily-panel tfoot { background: #f4eee4; font-weight: 600; }
+.report-daily-panel td, .report-daily-panel th { white-space: nowrap; }

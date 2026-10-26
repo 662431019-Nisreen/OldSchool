@@ -13,7 +13,8 @@ export default function SalesReport() {
     [error, setError] = useState(""),
     [loading, setLoading] = useState(true),
     [page, setPage] = useState(0),
-    [retry, setRetry] = useState(0);
+    [retry, setRetry] = useState(0),
+    [dailyPage, setDailyPage] = useState(0);
   const params = new URLSearchParams(
     mode === "day"
       ? { date }
@@ -34,6 +35,7 @@ export default function SalesReport() {
   useEffect(() => {
     const controller = new AbortController();
     setPage(0);
+    setDailyPage(0);
     setData(null);
     setError("");
     setLoading(true);
@@ -74,6 +76,18 @@ export default function SalesReport() {
   }, [params, invalid, retry]);
   const s = data?.summary;
   const rows = data?.orders || [];
+  const daily = data?.daily || [];
+  const dailyPageCount = Math.max(1, Math.ceil(daily.length / 31));
+  const shownDailyPage = Math.min(dailyPage, dailyPageCount - 1);
+  const dailyHasUnknown = daily.some((day: any) => day.unknown !== 0);
+  const exportLabel =
+    mode === "day"
+      ? "รายวัน"
+      : mode === "month"
+        ? "รายเดือน"
+        : mode === "all"
+          ? "ทั้งหมด"
+          : "ตามช่วงวันที่";
   const pageCount = Math.max(1, Math.ceil(rows.length / 25));
   const shownPage = Math.min(page, pageCount - 1);
   const period =
@@ -99,7 +113,7 @@ export default function SalesReport() {
             window.location.href = "/api/export?" + params;
           }}
         >
-          <Download size={17} /> ส่งออก Excel
+          <Download size={17} /> ส่งออก Excel {exportLabel}
         </button>
       </div>
       <div className="panel report-filter">
@@ -226,6 +240,114 @@ export default function SalesReport() {
           <p className="report-basis">
             เงินสดและโอนเป็นยอดหลังรับเพิ่ม/คืนเงินตามช่องทางที่บันทึกไว้
           </p>
+          <div className="panel report-daily-panel">
+            <div className="row">
+              <h3>สรุปยอดรายวัน</h3>
+              <small className="muted">{daily.length} วัน · ล่าสุดก่อน</small>
+            </div>
+            <p className="muted">
+              กดวันที่เพื่อดูรายการขายของวันนั้น · Excel
+              จะส่งออกตามช่วงที่เลือกด้านบน
+            </p>
+            {!daily.length ? (
+              <p>ไม่มีข้อมูลในช่วงที่เลือก</p>
+            ) : (
+              <>
+                <div className="report-table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>วันที่</th>
+                        <th>ออเดอร์</th>
+                        <th>แก้ว / ชิ้นที่ชำระแล้ว</th>
+                        <th>เงินสดสุทธิ</th>
+                        <th>โอนสุทธิ</th>
+                        {dailyHasUnknown && <th>ไม่ระบุวิธีชำระ</th>}
+                        <th>รับชำระสุทธิ</th>
+                        <th>รอชำระ</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {daily
+                        .slice(shownDailyPage * 31, shownDailyPage * 31 + 31)
+                        .map((day: any) => (
+                          <tr key={day.date}>
+                            <td>
+                              <button
+                                type="button"
+                                className="report-day-link"
+                                onClick={() => {
+                                  setDate(day.date);
+                                  setMode("day");
+                                }}
+                                aria-label={"ดูยอดวันที่ " + day.date}
+                              >
+                                {new Date(
+                                  day.date + "T12:00:00+07:00",
+                                ).toLocaleDateString("th-TH", {
+                                  timeZone: "Asia/Bangkok",
+                                })}
+                              </button>
+                            </td>
+                            <td>
+                              {day.count}
+                              <small>ชำระแล้ว {day.paidOrders}</small>
+                            </td>
+                            <td>
+                              {day.cups} แก้ว / {day.pieces} ชิ้น
+                            </td>
+                            <td>฿{money(day.cash)}</td>
+                            <td>฿{money(day.qr)}</td>
+                            {dailyHasUnknown && <td>฿{money(day.unknown)}</td>}
+                            <td>
+                              <strong>฿{money(day.sales)}</strong>
+                            </td>
+                            <td>฿{money(day.pending)}</td>
+                          </tr>
+                        ))}
+                    </tbody>
+                    <tfoot>
+                      <tr>
+                        <th>รวมช่วงที่เลือก</th>
+                        <td>{s.count}</td>
+                        <td>
+                          {s.cups} แก้ว / {s.pieces} ชิ้น
+                        </td>
+                        <td>฿{money(s.cash)}</td>
+                        <td>฿{money(s.qr)}</td>
+                        {dailyHasUnknown && <td>฿{money(s.unknown)}</td>}
+                        <td>
+                          <strong>฿{money(s.sales)}</strong>
+                        </td>
+                        <td>฿{money(s.pending)}</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+                {dailyPageCount > 1 && (
+                  <div className="report-pagination">
+                    <button
+                      aria-label="วันก่อนหน้าในตาราง"
+                      disabled={shownDailyPage === 0}
+                      onClick={() => setDailyPage(shownDailyPage - 1)}
+                    >
+                      <ChevronLeft size={17} />
+                    </button>
+                    <span>
+                      หน้า {shownDailyPage + 1} / {dailyPageCount}
+                    </span>
+                    <button
+                      aria-label="วันถัดไปในตาราง"
+                      disabled={shownDailyPage + 1 >= dailyPageCount}
+                      onClick={() => setDailyPage(shownDailyPage + 1)}
+                    >
+                      <ChevronRight size={17} />
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
           <div className="panel">
             <h3>
               ยอดขายแยกหมวดหมู่ <small className="muted">ก่อนปรับยอด</small>
