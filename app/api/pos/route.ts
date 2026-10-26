@@ -9,6 +9,7 @@ import {
   publicOrder,
   log,
 } from "@/lib/server";
+import { newOrderPushStatement } from "@/lib/push-engine";
 import { env } from "cloudflare:workers";
 import { reportOrders } from "@/lib/report-server";
 import { summarizeSales } from "@/lib/reports";
@@ -178,10 +179,13 @@ export async function POST(r: Request) {
       );
     }
     if (b.action === "logout") {
-      await db
-        .prepare("DELETE FROM sessions WHERE id=?")
-        .bind(cookie(r, "os_session") || "")
-        .run();
+      const session = cookie(r, "os_session") || "";
+      await db.batch([
+        db
+          .prepare("DELETE FROM staff_push_devices WHERE session_id=?")
+          .bind(session),
+        db.prepare("DELETE FROM sessions WHERE id=?").bind(session),
+      ]);
       return json({ ok: true }, 200, {
         "Set-Cookie":
           "os_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0",
@@ -209,24 +213,26 @@ export async function POST(r: Request) {
       const items = validateCart(b.items, c.products),
         total = items.reduce((s, x) => s + x.price * x.qty, 0),
         token = crypto.randomUUID();
-      await db
-        .prepare(
-          "INSERT OR IGNORE INTO orders(token,owner,idem,payload,total,created) VALUES(?,?,?,?,?,?)",
-        )
-        .bind(
-          token,
-          owner,
-          b.idem,
-          JSON.stringify({
-            items,
-            type: b.type,
-            table: b.type === "dinein" ? b.table : null,
-            method: "counter",
-          }),
-          total,
-          new Date().toISOString(),
-        )
-        .run();
+      await db.batch([
+        db
+          .prepare(
+            "INSERT OR IGNORE INTO orders(token,owner,idem,payload,total,created) VALUES(?,?,?,?,?,?)",
+          )
+          .bind(
+            token,
+            owner,
+            b.idem,
+            JSON.stringify({
+              items,
+              type: b.type,
+              table: b.type === "dinein" ? b.table : null,
+              method: "counter",
+            }),
+            total,
+            new Date().toISOString(),
+          ),
+        newOrderPushStatement(db, token),
+      ]);
       const o = await db
         .prepare("SELECT * FROM orders WHERE idem=? AND owner=?")
         .bind(b.idem, owner)
@@ -262,6 +268,37 @@ export async function POST(r: Request) {
       return json({ registered: rows.results.map((o: any) => o.token) });
     }
     if (!u) return json({ error: "กรุณาเข้าสู่ระบบ" }, 401);
+    if (
+      [
+        "staff-push-register",
+        "staff-push-state",
+        "staff-push-disable",
+      ].includes(b.action)
+    ) {
+      if (!["admin", "staff"].includes(u.role))
+        return json({ error: "ไม่มีสิทธิ์" }, 403);
+      const session = cookie(r, "os_session") || "";
+      if (b.action === "staff-push-register") {
+        const { registerStaffPush } = await import("@/lib/push");
+        return json(await registerStaffPush(u.id, session, b.subscription));
+      }
+      if (typeof b.endpoint !== "string" || b.endpoint.length > 3000)
+        return json({ error: "อุปกรณ์ไม่ถูกต้อง" }, 400);
+      if (b.action === "staff-push-disable") {
+        await db
+          .prepare("DELETE FROM staff_push_devices WHERE id=? AND user_id=?")
+          .bind(b.endpoint, u.id)
+          .run();
+        return json({ ok: true, registered: false });
+      }
+      const row = await db
+        .prepare(
+          "SELECT s.expires FROM staff_push_devices d JOIN sessions s ON s.id=d.session_id WHERE d.id=? AND d.user_id=? AND d.session_id=? AND s.expires>?",
+        )
+        .bind(b.endpoint, u.id, session, Date.now())
+        .first();
+      return json({ registered: !!row, expires: row?.expires || null });
+    }
     if (b.action === "counter-order" || b.action === "edit-order") {
       if (!["admin", "staff"].includes(u.role))
         return json({ error: "ไม่มีสิทธิ์" }, 403);
@@ -419,19 +456,15 @@ export async function POST(r: Request) {
             409,
           );
       } else {
-        await db
-          .prepare(
-            "INSERT OR IGNORE INTO orders(token,owner,idem,payload,total,created) VALUES(?,?,?,?,?,?)",
-          )
-          .bind(
-            crypto.randomUUID(),
-            owner,
-            b.idem,
-            JSON.stringify(payload),
-            total,
-            now,
-          )
-          .run();
+        const token = crypto.randomUUID();
+        await db.batch([
+          db
+            .prepare(
+              "INSERT OR IGNORE INTO orders(token,owner,idem,payload,total,created) VALUES(?,?,?,?,?,?)",
+            )
+            .bind(token, owner, b.idem, JSON.stringify(payload), total, now),
+          newOrderPushStatement(db, token),
+        ]);
       }
       await log(u.id, b.action, editing ? String(old.id) : b.idem);
       const saved = editing

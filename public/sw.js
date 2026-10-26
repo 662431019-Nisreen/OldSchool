@@ -66,6 +66,7 @@ self.addEventListener("push", (event) => {
         tag: payload.tag || "old-school-status",
         data: payload.data || { url: "/?view=orders" },
         renotify: true,
+        silent: false,
       });
       if (marker) {
         await seen.put(marker, new Response("seen"));
@@ -80,6 +81,7 @@ self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   event.waitUntil(
     (async () => {
+      let staff = false;
       let url = new URL("/?view=orders", self.location.origin);
       try {
         const candidate = new URL(
@@ -88,9 +90,12 @@ self.addEventListener("notificationclick", (event) => {
         );
         if (
           candidate.origin === self.location.origin &&
-          candidate.pathname === "/"
-        )
+          (candidate.pathname === "/" ||
+            (event.notification.data?.audience === "staff" && ["/admin", "/staff"].includes(candidate.pathname)))
+        ) {
           url = candidate;
+          staff = event.notification.data?.audience === "staff" && ["/admin", "/staff"].includes(candidate.pathname);
+        }
       } catch {}
       const windows = await self.clients.matchAll({
         type: "window",
@@ -100,7 +105,7 @@ self.addEventListener("notificationclick", (event) => {
       const existing = windows.find(
         (w) =>
           new URL(w.url).origin === url.origin &&
-          !/^\/(admin|staff)/.test(new URL(w.url).pathname),
+          (staff ? ["/admin", "/staff"].includes(new URL(w.url).pathname) : !/^\/(admin|staff)/.test(new URL(w.url).pathname)),
       );
       if (existing) {
         await existing.navigate(url.href);

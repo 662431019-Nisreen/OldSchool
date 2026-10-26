@@ -69,7 +69,7 @@ export default function StaffOrderSound({ sound }: { sound: ReturnType<typeof us
       {sound.enabled && <button type="button" className="secondary" onClick={sound.test}>ทดสอบเสียง</button>}
       <span role="status">{sound.latest || (sound.enabled ? "เปิดเสียงแล้ว" : "กดเปิดเสียง 1 ครั้งเมื่อเข้าหน้านี้")}</span>
     </div>
-    <small>เปิดหน้าทำงานร้านค้างไว้และเปิดเสียงเครื่อง ขณะล็อกจอหรือปิดเว็บเสียงอาจไม่ดัง</small>
+    <small>เสียงส่วนนี้ใช้ขณะเปิดเว็บ หากต้องการแจ้งตอนล็อกจอ ให้เปิด Push ด้านล่าง</small>
     {sound.message && <p role="alert">{sound.message}</p>}
   </section>;
 }

@@ -65,3 +65,11 @@ export const pushDeliveries = sqliteTable("push_deliveries", {
   error: text("error").notNull().default(""),
   created: integer("created").notNull(),
 });
+
+export const staffPushDevices = sqliteTable("staff_push_devices", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  sessionId: text("session_id").notNull(),
+  value: text("value").notNull(),
+  created: integer("created").notNull(),
+});

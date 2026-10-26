@@ -32,13 +32,19 @@ export async function processPushEvent(
   if (!claim.meta.changes) return result;
   const event = await db
     .prepare(
-      "SELECT e.*,o.token,o.status AS order_status FROM push_events e JOIN orders o ON o.id=e.order_id WHERE e.id=?",
+      "SELECT e.*,o.token,o.payload,o.status AS order_status FROM push_events e JOIN orders o ON o.id=e.order_id WHERE e.id=?",
     )
     .bind(eventId)
     .first();
   if (!event) return result;
   try {
-    if (event.order_status !== "ready") {
+    const staffEvent = event.kind === "staff_new";
+    if (
+      staffEvent
+        ? event.order_status !== "waiting" ||
+          Date.now() - event.created > 600000
+        : event.order_status !== "ready"
+    ) {
       result.status = "skipped";
       return result;
     }
@@ -46,12 +52,19 @@ export async function processPushEvent(
       result.status = "not_configured";
       return result;
     }
-    const rows = await db
-      .prepare(
-        "SELECT s.id,s.value FROM push_order_devices d JOIN subscriptions s ON s.id=d.subscription_id WHERE d.order_id=? LIMIT 5",
-      )
-      .bind(event.order_id)
-      .all();
+    const rows = staffEvent
+      ? await db
+          .prepare(
+            "SELECT d.id,d.value FROM staff_push_devices d JOIN users u ON u.id=d.user_id JOIN sessions s ON s.id=d.session_id AND s.user_id=u.id WHERE u.active=1 AND u.role IN('admin','staff') AND s.expires>? AND d.created<=? LIMIT 50",
+          )
+          .bind(Date.now(), event.created)
+          .all()
+      : await db
+          .prepare(
+            "SELECT s.id,s.value FROM push_order_devices d JOIN subscriptions s ON s.id=d.subscription_id WHERE d.order_id=? LIMIT 5",
+          )
+          .bind(event.order_id)
+          .all();
     result.devices = rows.results.length;
     if (!result.devices) {
       result.status = "no_devices";
@@ -61,7 +74,9 @@ export async function processPushEvent(
       rows.results.map(async (row: any) => {
         const hash = await deviceHash(row.id);
         const deliveryId =
-          (event.kind === "manual" ? event.id : "auto:" + event.order_id) +
+          (event.kind === "manual" || staffEvent
+            ? event.id
+            : "auto:" + event.order_id) +
           ":" +
           hash;
         const inserted = await db
@@ -91,16 +106,29 @@ export async function processPushEvent(
             error = "subscription_expired";
           } else {
             const number = "OS-" + String(event.order_id).padStart(4, "0");
-            const payload = {
-              title: "☕ Old School Coffee",
-              body: `เครื่องดื่มของคุณพร้อมแล้ว! ออเดอร์ #${number} กรุณามารับที่เคาน์เตอร์ค่ะ`,
-              tag: "old-school-" + number,
-              data: {
-                url: "/?view=orders#order=" + event.token,
-                number,
-                eventId: event.id,
-              },
-            };
+            const order = staffEvent ? JSON.parse(event.payload) : null;
+            const payload = staffEvent
+              ? {
+                  title: "☕ Old School Coffee",
+                  body: `มีออเดอร์ใหม่ #${number} · ${order.type === "takeaway" ? "รับกลับบ้าน" : "โต๊ะ " + order.table} กรุณาเปิดหน้ารับออเดอร์ค่ะ`,
+                  tag: "old-school-staff-" + number,
+                  data: {
+                    url: "/admin?view=orders",
+                    audience: "staff",
+                    number,
+                    eventId: event.id,
+                  },
+                }
+              : {
+                  title: "☕ Old School Coffee",
+                  body: `เครื่องดื่มของคุณพร้อมแล้ว! ออเดอร์ #${number} กรุณามารับที่เคาน์เตอร์ค่ะ`,
+                  tag: "old-school-" + number,
+                  data: {
+                    url: "/?view=orders#order=" + event.token,
+                    number,
+                    eventId: event.id,
+                  },
+                };
             const response = await sendPushRequest(
               subscription,
               payload,
@@ -133,12 +161,20 @@ export async function processPushEvent(
         }
         if (status === "expired") {
           result.expired++;
-          await db.batch([
-            db
-              .prepare("DELETE FROM push_order_devices WHERE subscription_id=?")
-              .bind(row.id),
-            db.prepare("DELETE FROM subscriptions WHERE id=?").bind(row.id),
-          ]);
+          if (staffEvent) {
+            await db
+              .prepare("DELETE FROM staff_push_devices WHERE id=?")
+              .bind(row.id)
+              .run();
+          } else
+            await db.batch([
+              db
+                .prepare(
+                  "DELETE FROM push_order_devices WHERE subscription_id=?",
+                )
+                .bind(row.id),
+              db.prepare("DELETE FROM subscriptions WHERE id=?").bind(row.id),
+            ]);
         } else if (status !== "accepted") result.failed++;
         await db
           .prepare(
@@ -175,4 +211,13 @@ export async function deviceHash(endpoint: string) {
     ),
     (x) => x.toString(16).padStart(2, "0"),
   ).join("");
+}
+
+// Token-match ensures an idempotent retry cannot enqueue a second new-order alert.
+export function newOrderPushStatement(db: Database, token: string) {
+  return db
+    .prepare(
+      "INSERT OR IGNORE INTO push_events(id,order_id,kind,created) SELECT 'staff-new:'||id,id,'staff_new',? FROM orders WHERE token=?",
+    )
+    .bind(Date.now(), token);
 }

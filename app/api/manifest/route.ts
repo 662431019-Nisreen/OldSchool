@@ -34,8 +34,18 @@ export async function GET(r: Request) {
       : Number.isInteger(table) && table >= 1 && table <= 100
         ? "/?table=" + table
         : "/";
+  const workspace = params.get("workspace") === "1";
   return Response.json(
-    { ...manifest, start_url: start },
+    workspace
+      ? {
+          ...manifest,
+          id: "/admin",
+          name: "Old School ร้าน",
+          short_name: "Old School ร้าน",
+          start_url: "/admin",
+          description: "รับออเดอร์และจัดการร้าน Old School Coffee",
+        }
+      : { ...manifest, start_url: start },
     {
       headers: {
         "Content-Type": "application/manifest+json",

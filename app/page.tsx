@@ -1,9 +1,16 @@
 "use client";
 import { useEffect, useState } from "react";
 import { api, money, statusNames } from "@/lib/client";
-import StaffOrderSound, { useStaffOrderSound } from "@/components/pos/StaffOrderSound";
+import StaffPushPanel from "@/components/pos/StaffPushPanel";
+import StaffOrderSound, {
+  useStaffOrderSound,
+} from "@/components/pos/StaffOrderSound";
 import TableContext from "@/components/pos/TableContext";
-import { qrContext, contextQuery, type OrderContext } from "@/lib/order-context";
+import {
+  qrContext,
+  contextQuery,
+  type OrderContext,
+} from "@/lib/order-context";
 import Storefront from "@/components/pos/Storefront";
 import CartItem from "@/components/pos/CartItem";
 import ProductDialog from "@/components/pos/ProductDialog";
@@ -107,7 +114,9 @@ export default function App() {
   const [focusedToken, setFocusedToken] = useState("");
   const [trackingLink, setTrackingLink] = useState("");
   const [orderEditor, setOrderEditor] = useState<any>(null);
-  const staffSound = useStaffOrderSound(user && (view === "admin" || view === "staff") ? user.id : null);
+  const staffSound = useStaffOrderSound(
+    user && (view === "admin" || view === "staff") ? user.id : null,
+  );
   const notify = (s: string) => {
     setToast(s);
     setTimeout(() => setToast(""), 4000);
@@ -117,14 +126,25 @@ export default function App() {
     setTable(context.table);
     try {
       sessionStorage.setItem("os_order_context", JSON.stringify(context));
-      localStorage.setItem("os_order_context_saved", JSON.stringify({ context, savedAt: Date.now() }));
+      localStorage.setItem(
+        "os_order_context_saved",
+        JSON.stringify({ context, savedAt: Date.now() }),
+      );
     } catch {}
-    const manifest = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
-    if (manifest) manifest.href = "/api/manifest?" + contextQuery(context);
+    const manifest = document.querySelector<HTMLLinkElement>(
+      'link[rel="manifest"]',
+    );
+    if (manifest)
+      manifest.href = /^\/(admin|staff)$/.test(location.pathname)
+        ? "/api/manifest?workspace=1"
+        : "/api/manifest?" + contextQuery(context);
     // Keep the actual page URL in sync as iOS may save it when installing.
     const url = new URL(location.href);
-    url.searchParams.delete("table"); url.searchParams.delete("type");
-    new URLSearchParams(contextQuery(context)).forEach((value, key) => url.searchParams.set(key, value));
+    url.searchParams.delete("table");
+    url.searchParams.delete("type");
+    new URLSearchParams(contextQuery(context)).forEach((value, key) =>
+      url.searchParams.set(key, value),
+    );
     history.replaceState(null, "", url);
   };
   const load = async () => {
@@ -140,21 +160,42 @@ export default function App() {
   };
   useEffect(() => {
     load();
+    if (/^\/(admin|staff)$/.test(location.pathname)) {
+      const manifest = document.querySelector<HTMLLinkElement>(
+        'link[rel="manifest"]',
+      );
+      if (manifest) manifest.href = "/api/manifest?workspace=1";
+    }
     const p = new URLSearchParams(location.search);
     let context = qrContext(location.href, location.origin);
     if (!p.has("table") && !p.has("type")) {
       try {
-        const session = JSON.parse(sessionStorage.getItem("os_order_context") || "null");
-        context = session ? qrContext(location.origin + "/?" + contextQuery(session), location.origin) : null;
+        const session = JSON.parse(
+          sessionStorage.getItem("os_order_context") || "null",
+        );
+        context = session
+          ? qrContext(
+              location.origin + "/?" + contextQuery(session),
+              location.origin,
+            )
+          : null;
         if (!context) {
-          const saved = JSON.parse(localStorage.getItem("os_order_context_saved") || "null");
+          const saved = JSON.parse(
+            localStorage.getItem("os_order_context_saved") || "null",
+          );
           if (saved && Date.now() - saved.savedAt < 6 * 60 * 60 * 1000)
-            context = qrContext(location.origin + "/?" + contextQuery(saved.context), location.origin);
+            context = qrContext(
+              location.origin + "/?" + contextQuery(saved.context),
+              location.origin,
+            );
         }
       } catch {}
     }
     if (context) applyOrderContext(context);
-    else { setTable(0); sessionStorage.removeItem("os_order_context"); }
+    else {
+      setTable(0);
+      sessionStorage.removeItem("os_order_context");
+    }
     if (p.get("view") === "orders") setView("orders");
     const openTracked = () => {
       const match = location.hash.match(/^#order=([-a-zA-Z0-9]{20,80})$/);
@@ -214,16 +255,22 @@ export default function App() {
           ];
         }
         if (cancelled) return;
-        if (user && (view === "staff" || view === "admin")) staffSound.receiveOrders(next);
+        if (user && (view === "staff" || view === "admin"))
+          staffSound.receiveOrders(next);
         setOrders(next);
         setError("");
       } catch (e: any) {
         if (!cancelled) setError(e.message);
-      } finally { inFlight = false; }
+      } finally {
+        inFlight = false;
+      }
     };
     refresh();
     const id = setInterval(refresh, 4000);
-    return () => { cancelled = true; clearInterval(id); };
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
   }, [view, user, ready, focusedToken]);
   useEffect(() => {
     if (view === "admin" && user?.role === "admin")
@@ -701,6 +748,7 @@ export default function App() {
             </button>
           </div>
           <StaffOrderSound sound={staffSound} />
+          <StaffPushPanel />
           <div className="workspace-navigation">
             <div
               className="workspace-status-strip"
@@ -1302,7 +1350,14 @@ export default function App() {
                 <span>รวมทั้งหมด</span>
                 <strong className="price">฿{money(total)}</strong>
               </div>
-              {cart.length > 0 && <TableContext table={table} type={orderType} maxTables={config.tables} onChange={applyOrderContext} />}
+              {cart.length > 0 && (
+                <TableContext
+                  table={table}
+                  type={orderType}
+                  maxTables={config.tables}
+                  onChange={applyOrderContext}
+                />
+              )}
               {cart.length > 0 && (
                 <p className="cart-order-context">
                   {orderType === "takeaway"

@@ -143,6 +143,44 @@ await event("notificationclick", {
   notification: { data: { url: "https://evil.test/steal" }, close() {} },
 });
 assert.equal(navigated.at(-1), "https://cafe.test/?view=orders");
+// Staff notification reuses only a staff window and carries no customer tracking token.
+const shop = {
+  url: "/admin?view=orders",
+  audience: "staff",
+  eventId: "staff-new:9",
+};
+await event("push", {
+  data: { json: () => ({ body: "มีออเดอร์ใหม่", data: shop, tag: "staff-9" }) },
+});
+assert.equal(shown.at(-1).silent, false);
+const beforeOpened = opened.length;
+await event("notificationclick", { notification: { data: shop, close() {} } });
+assert.equal(
+  opened.length,
+  beforeOpened + 1,
+  "customer window must not be replaced by workspace",
+);
+assert.equal(opened.at(-1), "https://cafe.test/admin?view=orders");
+self.clients.matchAll = async () => [
+  {
+    url: "https://cafe.test/admin",
+    async navigate(u) {
+      navigated.push(u);
+    },
+    async focus() {
+      focused++;
+    },
+  },
+];
+await event("notificationclick", { notification: { data: shop, close() {} } });
+assert.equal(navigated.at(-1), "https://cafe.test/admin?view=orders");
+await event("notificationclick", {
+  notification: {
+    data: { url: "https://evil.test/admin", audience: "staff" },
+    close() {},
+  },
+});
+assert.equal(opened.at(-1), "https://cafe.test/?view=orders");
 let response;
 listeners.fetch({
   request: { mode: "navigate", method: "GET" },

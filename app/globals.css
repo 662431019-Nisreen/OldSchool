@@ -3560,3 +3560,7 @@ td button,
 .staff-sound-actions span { color: #64421e; font-size: 14px; }
 .staff-order-sound small { display: block; color: #756957; margin-top: 8px; line-height: 1.6; }
 .staff-order-sound p { margin-top: 8px; }
+.staff-push-panel { margin-bottom: 16px; padding: 16px; background: #fff; border: 1px solid #e4d9c8; border-radius: 12px; }
+.staff-push-panel small { display: block; color: #756957; font-size: 12px; line-height: 1.7; margin-top: 10px; }
+.staff-push-panel > button { margin-top: 12px; }
+.staff-push-confirmed { color: #38734d; }

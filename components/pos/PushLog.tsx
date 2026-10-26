@@ -10,7 +10,7 @@ const labels: Record<string, string> = {
   no_devices: "ยังไม่มีอุปกรณ์ลงทะเบียน",
   not_configured: "ระบบ Push ยังไม่พร้อม",
   duplicate: "ข้ามคำขอซ้ำ",
-  skipped: "ข้ามเพราะออเดอร์ไม่อยู่สถานะพร้อมรับ",
+  skipped: "ข้ามเพราะสถานะเปลี่ยนหรือแจ้งเตือนเก่าแล้ว",
 };
 export default function PushLog({ id }: { id: number }) {
   const [data, setData] = useState<any>(null),
@@ -34,7 +34,7 @@ export default function PushLog({ id }: { id: number }) {
       <summary>ผลการแจ้งเตือน</summary>
       <p>
         “รับคำขอแล้ว” หมายถึงบริการ Push รับข้อมูลแล้ว
-        ยังไม่ใช่การยืนยันว่าเครื่องลูกค้าแสดงหรือเปิดอ่าน
+        ยังไม่ใช่การยืนยันว่าอุปกรณ์แสดงหรือเปิดอ่าน
       </p>
       {error && <p>{error}</p>}
       {!data && !error && <p>กำลังโหลด...</p>}
@@ -43,7 +43,13 @@ export default function PushLog({ id }: { id: number }) {
       )}
       {data?.events.map((event: any) => (
         <div key={event.id}>
-          <b>{event.kind === "manual" ? "พนักงานเรียกซ้ำ" : "แจ้งอัตโนมัติ"}</b>{" "}
+          <b>
+            {event.kind === "staff_new"
+              ? "ออเดอร์ใหม่ → ทีมร้าน"
+              : event.kind === "manual"
+                ? "พนักงานเรียกซ้ำ"
+                : "แจ้งลูกค้าอัตโนมัติ"}
+          </b>{" "}
           · {labels[event.status] || event.status}
           <small>{new Date(event.created).toLocaleString("th-TH")}</small>
           {data.deliveries

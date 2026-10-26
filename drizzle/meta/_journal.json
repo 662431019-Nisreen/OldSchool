@@ -15,6 +15,13 @@
       "when": 1792985649414,
       "tag": "0001_icy_silver_centurion",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1792998713341,
+      "tag": "0002_wooden_iron_patriot",
+      "breakpoints": true
     }
   ]
 }

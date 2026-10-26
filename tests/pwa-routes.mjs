@@ -15,6 +15,15 @@ for (const [query, url] of [
   assert.equal(d.id, "/");
   assert.equal(d.scope, "/");
 }
+const staffManifest = await (
+  await fetch(base + "/api/manifest?workspace=1")
+).json();
+assert.equal(staffManifest.id, "/admin");
+assert.equal(staffManifest.start_url, "/admin");
+assert.equal(staffManifest.name, "Old School ร้าน");
+const adminHtml = await (await fetch(base + "/admin")).text();
+assert.match(adminHtml, /manifest[^>]*workspace=1/);
+assert.match(adminHtml, /Old School ร้าน/);
 const key = await (await fetch(base + "/api/pos?action=push-key")).json();
 assert.equal(key.configured, true);
 assert.equal(typeof key.key, "string");

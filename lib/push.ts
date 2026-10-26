@@ -33,6 +33,11 @@ export async function drainPendingPush() {
     cleanupAt = Date.now() + 86400000;
     const cutoff = Date.now() - 30 * 86400000;
     await db.batch([
+      db
+        .prepare(
+          "DELETE FROM staff_push_devices WHERE session_id NOT IN(SELECT s.id FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.expires>? AND u.active=1 AND u.role IN('admin','staff'))",
+        )
+        .bind(Date.now()),
       db.prepare("DELETE FROM push_deliveries WHERE created<?").bind(cutoff),
       db.prepare("DELETE FROM push_events WHERE created<?").bind(cutoff),
       db
@@ -139,4 +144,48 @@ export async function registerOrderPush(guest: string, raw: any, tokens: any) {
   if (!saved[0].meta.changes)
     throw new Error("อุปกรณ์นี้ถูกลงทะเบียนในการใช้งานอื่นแล้ว");
   return { ok: true, registered: orders.results.map((o) => o.token) };
+}
+
+export async function registerStaffPush(
+  userId: string,
+  sessionId: string,
+  raw: any,
+) {
+  const { validateSubscription } = await import("./webpush");
+  if (!(await configuredPushKeys())) throw new Error("ระบบ Push ยังไม่พร้อม");
+  const subscription = await validateSubscription(raw),
+    db = DB();
+  const existing = await db
+    .prepare("SELECT user_id FROM staff_push_devices WHERE id=?")
+    .bind(subscription.endpoint)
+    .first<{ user_id: string }>();
+  if (existing && existing.user_id !== userId)
+    throw new Error(
+      "อุปกรณ์นี้ลงทะเบียนกับบัญชีอื่น กรุณาปิดแจ้งเตือนจากบัญชีเดิมก่อน",
+    );
+  const total = await db
+    .prepare("SELECT count(*) n FROM staff_push_devices")
+    .first<{ n: number }>();
+  const count = await db
+    .prepare("SELECT count(*) n FROM staff_push_devices WHERE user_id=?")
+    .bind(userId)
+    .first<{ n: number }>();
+  if (!existing && ((count?.n || 0) >= 5 || (total?.n || 0) >= 50))
+    throw new Error(
+      "ลงทะเบียนอุปกรณ์ครบแล้ว กรุณาปิดแจ้งเตือนเครื่องที่ไม่ใช้",
+    );
+  const saved = await db
+    .prepare(
+      "INSERT INTO staff_push_devices(id,user_id,session_id,value,created) VALUES(?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET session_id=excluded.session_id,value=excluded.value WHERE staff_push_devices.user_id=excluded.user_id",
+    )
+    .bind(
+      subscription.endpoint,
+      userId,
+      sessionId,
+      JSON.stringify(subscription),
+      Date.now(),
+    )
+    .run();
+  if (!saved.meta.changes) throw new Error("ลงทะเบียนอุปกรณ์ไม่สำเร็จ");
+  return { ok: true, registered: true };
 }

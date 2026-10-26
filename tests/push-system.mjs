@@ -307,6 +307,140 @@ try {
   const count = sent.length;
   await push.drainPendingPush();
   assert.equal(sent.length, count);
+  // Staff devices are isolated from guest subscriptions and authorized per live session.
+  for (let i = 0; i < 10; i++) await push.drainPendingPush();
+  const shopDevice = device("shop-ipad");
+  assert.equal(
+    (await request("staff-push-register", { subscription: shopDevice })).status,
+    401,
+  );
+  assert.equal(
+    (await request("staff-push-register", { subscription: shopDevice }, admin))
+      .registered,
+    true,
+  );
+  assert.equal(
+    (
+      await request(
+        "staff-push-state",
+        { endpoint: shopDevice.endpoint },
+        admin,
+      )
+    ).registered,
+    true,
+  );
+  assert.equal(
+    (
+      await request(
+        "staff-push-state",
+        { endpoint: shopDevice.endpoint },
+        staff,
+      )
+    ).registered,
+    false,
+  );
+  assert.equal(
+    (await request("staff-push-register", { subscription: shopDevice }, staff))
+      .status,
+    400,
+  );
+  assert.equal(
+    (
+      await request(
+        "staff-push-disable",
+        { endpoint: shopDevice.endpoint },
+        staff,
+      )
+    ).ok,
+    true,
+  );
+  assert.equal(
+    (
+      await request(
+        "staff-push-state",
+        { endpoint: shopDevice.endpoint },
+        admin,
+      )
+    ).registered,
+    true,
+  );
+  httpStatus = 201;
+  const staffPayload = { ...payload, idem: crypto.randomUUID() };
+  const newOrder = (await request("order", staffPayload)).order;
+  assert(newOrder);
+  const eventId = "staff-new:" + newOrder.id;
+  assert.equal(
+    sqlite.prepare("SELECT kind FROM push_events WHERE id=?").get(eventId).kind,
+    "staff_new",
+  );
+  const beforeStaff = sent.length;
+  await Promise.all([push.sendPushEvent(eventId), push.sendPushEvent(eventId)]);
+  assert.equal(sent.length, beforeStaff + 1);
+  assert.equal(sent.at(-1), shopDevice.endpoint);
+  await request("order", staffPayload);
+  await push.drainPendingPush();
+  assert.equal(
+    sent.length,
+    beforeStaff + 1,
+    "idempotent order does not repeat staff alert",
+  );
+  const customerBindings = sqlite
+    .prepare("SELECT count(*) n FROM subscriptions")
+    .get().n;
+  await request("staff-push-disable", { endpoint: shopDevice.endpoint }, admin);
+  assert.equal(
+    sqlite.prepare("SELECT count(*) n FROM subscriptions").get().n,
+    customerBindings,
+    "staff disable leaves customer subscriptions intact",
+  );
+  await request("staff-push-register", { subscription: shopDevice }, admin);
+  const expiredOrder = (
+    await request("order", { ...payload, idem: crypto.randomUUID() })
+  ).order;
+  httpStatus = 410;
+  await push.sendPushEvent("staff-new:" + expiredOrder.id);
+  assert.equal(
+    sqlite.prepare("SELECT count(*) n FROM staff_push_devices").get().n,
+    0,
+  );
+  httpStatus = 201;
+  await request("staff-push-register", { subscription: shopDevice }, admin);
+  const revokedOrder = (
+    await request("order", { ...payload, idem: crypto.randomUUID() })
+  ).order;
+  sqlite
+    .prepare("UPDATE sessions SET expires=0 WHERE id='admin-session'")
+    .run();
+  const beforeRevoked = sent.length;
+  await push.sendPushEvent("staff-new:" + revokedOrder.id);
+  assert.equal(
+    sent.length,
+    beforeRevoked,
+    "expired login cannot receive shop push",
+  );
+  sqlite
+    .prepare("UPDATE sessions SET expires=? WHERE id='admin-session'")
+    .run(Date.now() + 100000);
+  const disabledOrder = (
+    await request("order", { ...payload, idem: crypto.randomUUID() })
+  ).order;
+  sqlite.prepare("UPDATE users SET active=0 WHERE id='admin'").run();
+  await push.sendPushEvent("staff-new:" + disabledOrder.id);
+  assert.equal(
+    sent.length,
+    beforeRevoked,
+    "disabled staff cannot receive push",
+  );
+  sqlite.prepare("UPDATE users SET active=1 WHERE id='admin'").run();
+  await request("logout", {}, admin);
+  assert.equal(
+    sqlite.prepare("SELECT count(*) n FROM staff_push_devices").get().n,
+    0,
+    "logout revokes device",
+  );
+  console.log(
+    "PASS: staff push auth, session expiry, role ownership, automatic new-order event, dedupe, disable, expired cleanup and logout revocation",
+  );
   console.log(
     "PASS: real API handlers + isolated SQLite; per-order device ownership; queued atomic status; automatic dedupe; late registration; manual cooldown; expired cleanup; failures and sanitized logs; private tracking tokens. All push transport was mocked, not device delivery.",
   );
