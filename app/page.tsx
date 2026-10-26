@@ -17,7 +17,6 @@ import PushLog from "@/components/pos/PushLog";
 import PwaInstallGuide from "@/components/pos/PwaInstallGuide";
 import SalesReport from "@/components/pos/SalesReport";
 import OrderEditor from "@/components/pos/OrderEditor";
-import ReceiptDialog from "@/components/pos/ReceiptDialog";
 import TableQr from "@/components/pos/TableQr";
 import {
   Coffee,
@@ -47,7 +46,6 @@ import {
   Leaf,
   GlassWater,
   Package,
-  Printer,
   Heart,
   Sun,
   Truck,
@@ -114,7 +112,6 @@ export default function App() {
   const [focusedToken, setFocusedToken] = useState("");
   const [trackingLink, setTrackingLink] = useState("");
   const [orderEditor, setOrderEditor] = useState<any>(null);
-  const [receiptId, setReceiptId] = useState<number | null>(null);
   const staffSound = useStaffOrderSound(
     user && (view === "admin" || view === "staff") ? user.id : null,
   );
@@ -1738,9 +1735,6 @@ export default function App() {
           </form>
         </div>
       )}
-      {receiptId !== null && user && (view === "admin" || view === "staff") && (
-        <ReceiptDialog id={receiptId} onClose={() => setReceiptId(null)} />
-      )}
       {toast && (
         <div role="status" className="toast">
           <CheckCircle2 size={19} />
@@ -1873,14 +1867,6 @@ export default function App() {
         )}
         <PushLog id={o.id} />
         <div className="staff-actions">
-          <button
-            type="button"
-            disabled={busy || o.payment !== "paid"}
-            title={o.payment === "paid" ? "เปิดตัวอย่างใบเสร็จและเลือกขนาดกระดาษ" : "ยืนยันรับชำระเงินก่อนพิมพ์ใบเสร็จ"}
-            onClick={() => setReceiptId(o.id)}
-          >
-            <Printer size={16} /> พิมพ์ใบเสร็จ
-          </button>
           {(o.payment !== "paid" || user?.role === "admin") && (
             <button
               disabled={busy}
