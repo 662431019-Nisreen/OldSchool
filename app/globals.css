@@ -3549,3 +3549,14 @@ td button,
   font: inherit;
   background: #fff;
 }
+
+.table-context { margin: 12px auto; padding: 12px 16px; max-width: 1120px; border: 1px solid var(--line, #e7e1d8); border-radius: 12px; background: #faf7f0; }
+.table-context .row { gap: 12px; flex-wrap: wrap; }
+.table-context button { min-height: 40px; padding: 8px 12px; }
+.table-context small { display: block; color: #756957; margin-top: 6px; }
+.table-context-tools { margin-top: 10px; }
+.table-context-tools p { font-size: 14px; line-height: 1.6; }
+.table-context-tools details { margin-top: 12px; }
+.table-context-tools form { display: flex; flex-wrap: wrap; align-items: end; gap: 8px; margin-top: 10px; }
+.table-context-tools label { flex: 1; min-width: 180px; }
+.table-context-tools input { display: block; width: 100%; }

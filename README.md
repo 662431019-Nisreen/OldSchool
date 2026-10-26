@@ -176,3 +176,6 @@ Subscription เก่าที่ไม่มีการผูกออเด�
 ### Worker transport regression
 
 Cloudflare Workers รองรับ fetch redirect เฉพาะ `follow` / `manual`; ตัวส่ง Push ใช้ `manual` และจัด 3xx เป็น `push_redirect_blocked` โดยไม่ตาม Location ไปที่อื่น การทดสอบเพิ่มเติม `node tests/worker-webpush.mjs` ใช้ native workerd/Miniflare (มิใช่ Node fetch) ตรวจทั้งเข้ารหัส ส่งสำเร็จจำลอง และไม่ตาม redirect ไม่มีการส่ง notification ไปอุปกรณ์จริงในชุดนี้
+
+### QR table context in an installed app
+Safari and an installed iOS home-screen app can have separate storage. Scanning with the system camera does not reliably update an already installed app. The customer menu now displays the current table and offers a QR photo reader (camera/image input, decoded locally with jsQR) and a same-origin QR-link import. No photo is uploaded. The imported context updates the page URL and installation manifest; the app remembers the context locally for up to six hours between sessions. Explicit QR links take precedence. Customers must check the displayed table and rescan when moving tables. Existing icons can be used without reinstalling; scan inside the app when the table is missing or outdated. Actual iPhone camera-image QA remains necessary.

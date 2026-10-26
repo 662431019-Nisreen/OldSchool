@@ -1,6 +1,8 @@
 "use client";
 import { useEffect, useState } from "react";
 import { api, money, statusNames } from "@/lib/client";
+import TableContext from "@/components/pos/TableContext";
+import { qrContext, contextQuery, type OrderContext } from "@/lib/order-context";
 import Storefront from "@/components/pos/Storefront";
 import CartItem from "@/components/pos/CartItem";
 import ProductDialog from "@/components/pos/ProductDialog";
@@ -108,6 +110,21 @@ export default function App() {
     setToast(s);
     setTimeout(() => setToast(""), 4000);
   };
+  const applyOrderContext = (context: OrderContext) => {
+    setOrderType(context.type);
+    setTable(context.table);
+    try {
+      sessionStorage.setItem("os_order_context", JSON.stringify(context));
+      localStorage.setItem("os_order_context_saved", JSON.stringify({ context, savedAt: Date.now() }));
+    } catch {}
+    const manifest = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
+    if (manifest) manifest.href = "/api/manifest?" + contextQuery(context);
+    // Keep the actual page URL in sync as iOS may save it when installing.
+    const url = new URL(location.href);
+    url.searchParams.delete("table"); url.searchParams.delete("type");
+    new URLSearchParams(contextQuery(context)).forEach((value, key) => url.searchParams.set(key, value));
+    history.replaceState(null, "", url);
+  };
   const load = async () => {
     try {
       const d = await api("menu");
@@ -122,41 +139,20 @@ export default function App() {
   useEffect(() => {
     load();
     const p = new URLSearchParams(location.search);
-    let context: { type: string; table: number } | null = null;
-    if (p.get("type") === "takeaway") context = { type: "takeaway", table: 0 };
-    else if (p.has("table")) {
-      const t = Number(p.get("table"));
-      if (Number.isInteger(t) && t > 0) context = { type: "dinein", table: t };
-    } else {
+    let context = qrContext(location.href, location.origin);
+    if (!p.has("table") && !p.has("type")) {
       try {
-        context = JSON.parse(
-          sessionStorage.getItem("os_order_context") || "null",
-        );
+        const session = JSON.parse(sessionStorage.getItem("os_order_context") || "null");
+        context = session ? qrContext(location.origin + "/?" + contextQuery(session), location.origin) : null;
+        if (!context) {
+          const saved = JSON.parse(localStorage.getItem("os_order_context_saved") || "null");
+          if (saved && Date.now() - saved.savedAt < 6 * 60 * 60 * 1000)
+            context = qrContext(location.origin + "/?" + contextQuery(saved.context), location.origin);
+        }
       } catch {}
     }
-    if (
-      context &&
-      (context.type === "takeaway" ||
-        (context.type === "dinein" &&
-          Number.isInteger(context.table) &&
-          context.table > 0))
-    ) {
-      setOrderType(context.type);
-      setTable(context.type === "takeaway" ? 0 : context.table);
-      sessionStorage.setItem("os_order_context", JSON.stringify(context));
-      const manifest = document.querySelector<HTMLLinkElement>(
-        'link[rel="manifest"]',
-      );
-      if (manifest)
-        manifest.href =
-          "/api/manifest?" +
-          (context.type === "takeaway"
-            ? "type=takeaway"
-            : "table=" + context.table);
-    } else {
-      setTable(0);
-      sessionStorage.removeItem("os_order_context");
-    }
+    if (context) applyOrderContext(context);
+    else { setTable(0); sessionStorage.removeItem("os_order_context"); }
     if (p.get("view") === "orders") setView("orders");
     const openTracked = () => {
       const match = location.hash.match(/^#order=([-a-zA-Z0-9]{20,80})$/);
@@ -446,6 +442,8 @@ export default function App() {
         </div>
       )}
       {view === "shop" && (
+        <>
+        <TableContext table={table} type={orderType} maxTables={config.tables} onChange={applyOrderContext} />
         <Storefront
           config={config}
           query={query}
@@ -456,6 +454,7 @@ export default function App() {
           openProduct={openProduct}
           nav={nav}
         />
+        </>
       )}
       {orderEditor && user && (
         <OrderEditor
@@ -1297,6 +1296,7 @@ export default function App() {
                 <span>รวมทั้งหมด</span>
                 <strong className="price">฿{money(total)}</strong>
               </div>
+              {cart.length > 0 && (!table && orderType !== "takeaway") && <TableContext table={table} type={orderType} maxTables={config.tables} onChange={applyOrderContext} />}
               {cart.length > 0 && (
                 <p className="cart-order-context">
                   {orderType === "takeaway"
