@@ -107,7 +107,7 @@ const originalFetch = globalThis.fetch;
 let httpStatus = 201;
 globalThis.fetch = async (url, opts) => {
   assert(/^https:\/\/(fcm.googleapis.com|web.push.apple.com)/.test(url));
-  assert.equal(opts.redirect, "error");
+  assert.equal(opts.redirect, "manual");
   assert.equal(opts.headers["Content-Encoding"], "aes128gcm");
   assert(opts.body.byteLength > 100);
   sent.push(url);

@@ -1,4 +1,4 @@
-import { pushRequest, type PushKeys } from "./webpush";
+import { sendPushRequest, type PushKeys } from "./webpush";
 type Database = {
   prepare: (sql: string) => any;
   batch: (statements: any[]) => Promise<any[]>;
@@ -101,14 +101,12 @@ export async function processPushEvent(
                 eventId: event.id,
               },
             };
-            const request = await pushRequest(subscription, payload, keys);
-            const response = await transport(subscription.endpoint, {
-              method: "POST",
-              headers: request.headers,
-              body: request.body,
-              redirect: "error",
-              signal: AbortSignal.timeout(8000),
-            });
+            const response = await sendPushRequest(
+              subscription,
+              payload,
+              keys,
+              transport,
+            );
             http = response.status;
             if (response.ok) {
               status = "accepted";
@@ -118,11 +116,13 @@ export async function processPushEvent(
               error = "subscription_gone";
             } else {
               error =
-                http === 401 || http === 403
-                  ? "push_auth_rejected"
-                  : http === 429
-                    ? "push_rate_limited"
-                    : "push_http_error";
+                http >= 300 && http < 400
+                  ? "push_redirect_blocked"
+                  : http === 401 || http === 403
+                    ? "push_auth_rejected"
+                    : http === 429
+                      ? "push_rate_limited"
+                      : "push_http_error";
             }
           }
         } catch (e: any) {

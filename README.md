@@ -172,3 +172,7 @@ Subscription เก่าที่ไม่มีการผูกออเด�
 - รายงานและ Excel ใช้ตัวกรองและการคำนวณร่วมกัน Excel มีแผ่น Summary, Orders, Revisions
 - รายงานโหลดจาก Server แยกจากบอร์ดออเดอร์ 500 รายการ หากช่วงมีเกิน 10,000 รายการ จะแจ้งให้เลือกช่วงสั้นลงแทนการตัดยอดเงียบ ๆ
 - ตรวจสอบ: `node --experimental-strip-types tests/reports.mjs` และ `node tests/export.mjs` ขณะเปิด localhost
+
+### Worker transport regression
+
+Cloudflare Workers รองรับ fetch redirect เฉพาะ `follow` / `manual`; ตัวส่ง Push ใช้ `manual` และจัด 3xx เป็น `push_redirect_blocked` โดยไม่ตาม Location ไปที่อื่น การทดสอบเพิ่มเติม `node tests/worker-webpush.mjs` ใช้ native workerd/Miniflare (มิใช่ Node fetch) ตรวจทั้งเข้ารหัส ส่งสำเร็จจำลอง และไม่ตาม redirect ไม่มีการส่ง notification ไปอุปกรณ์จริงในชุดนี้

@@ -261,3 +261,21 @@ export async function pushRequest(
     },
   };
 }
+
+export async function sendPushRequest(
+  subscription: DeviceSubscription,
+  payload: any,
+  keys: PushKeys,
+  transport: typeof fetch = fetch,
+) {
+  const request = await pushRequest(subscription, payload, keys);
+  // Workers rejects redirect:"error". "manual" prevents following redirects;
+  // the caller records any 3xx response as a failed, blocked delivery.
+  return transport(subscription.endpoint, {
+    method: "POST",
+    headers: request.headers,
+    body: request.body,
+    redirect: "manual",
+    signal: AbortSignal.timeout(8000),
+  });
+}
