@@ -3554,3 +3554,9 @@ td button,
 .table-context label { display: block; font-size: 14px; margin-bottom: 8px; }
 .table-context select { display: block; width: 100%; min-height: 44px; font: inherit; font-size: 16px; border: 1px solid #cfc3b3; border-radius: 8px; padding: 8px 12px; background: #fff; color: #3b2b1e; }
 .table-context small { display: block; font-size: 12px; color: #756957; margin-top: 6px; }
+.staff-order-sound { padding: 12px 16px; margin-bottom: 16px; background: #f4eee4; border: 1px solid #e4d9c8; border-radius: 12px; }
+.staff-sound-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.staff-sound-actions button { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; }
+.staff-sound-actions span { color: #64421e; font-size: 14px; }
+.staff-order-sound small { display: block; color: #756957; margin-top: 8px; line-height: 1.6; }
+.staff-order-sound p { margin-top: 8px; }

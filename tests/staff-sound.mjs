@@ -1,0 +1,15 @@
+import assert from 'node:assert/strict';
+import { createArrivalTracker, playOrderChime } from '../lib/staff-sound.ts';
+const detect=createArrivalTracker();
+assert.equal(detect([{id:1,status:'waiting'},{id:2,status:'done'}]),0,'do not ring historical orders');
+assert.equal(detect([{id:2,status:'done'},{id:1,status:'waiting'}]),0);
+assert.equal(detect([{id:1,status:'making'},{id:3,status:'waiting'},{id:4,status:'waiting'}]),2);
+assert.equal(detect([{id:3,status:'waiting'},{id:4,status:'waiting'}]),0,'no repeat during polling');
+assert.equal(detect([{id:1,status:'waiting'},{id:3,status:'ready'},{id:4,status:'done'}]),0,'known IDs remain known even if temporarily missing');
+assert.equal(detect([{id:5,status:'done'}]),0,'do not ring new history entries');
+const empty=createArrivalTracker();assert.equal(empty([]),0);assert.equal(empty([{id:1,status:'waiting'}]),1);
+const scheduled=[];
+const context={state:'running',currentTime:10,destination:{},createGain(){return {gain:{setValueAtTime(){},linearRampToValueAtTime(){},exponentialRampToValueAtTime(){}},connect(){},disconnect(){}}},createOscillator(){return {frequency:{value:0},connect(){},disconnect(){},start(at){scheduled.push(at)},stop(){}}}};
+assert.equal(playOrderChime({...context,state:'suspended'}),false);assert.equal(scheduled.length,0);
+assert.equal(playOrderChime(context),true);assert.equal(scheduled.length,3);assert.ok(scheduled[1]>scheduled[0]);assert.ok(scheduled[2]>scheduled[1]);
+console.log('PASS: initial baseline, empty baseline, new orders, deduplication, status changes, and chime scheduling');

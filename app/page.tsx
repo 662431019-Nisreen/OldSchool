@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { api, money, statusNames } from "@/lib/client";
+import StaffOrderSound, { useStaffOrderSound } from "@/components/pos/StaffOrderSound";
 import TableContext from "@/components/pos/TableContext";
 import { qrContext, contextQuery, type OrderContext } from "@/lib/order-context";
 import Storefront from "@/components/pos/Storefront";
@@ -106,6 +107,7 @@ export default function App() {
   const [focusedToken, setFocusedToken] = useState("");
   const [trackingLink, setTrackingLink] = useState("");
   const [orderEditor, setOrderEditor] = useState<any>(null);
+  const staffSound = useStaffOrderSound(user && (view === "admin" || view === "staff") ? user.id : null);
   const notify = (s: string) => {
     setToast(s);
     setTimeout(() => setToast(""), 4000);
@@ -194,7 +196,11 @@ export default function App() {
   }, [cart]);
   useEffect(() => {
     if (!ready) return;
+    let cancelled = false;
+    let inFlight = false;
     const refresh = async () => {
+      if (inFlight || cancelled) return;
+      inFlight = true;
       try {
         const d = await api(
           user && (view === "staff" || view === "admin") ? "orders" : "mine",
@@ -207,15 +213,17 @@ export default function App() {
             ...next.filter((o: any) => o.token !== tracked.order.token),
           ];
         }
+        if (cancelled) return;
+        if (user && (view === "staff" || view === "admin")) staffSound.receiveOrders(next);
         setOrders(next);
         setError("");
       } catch (e: any) {
-        setError(e.message);
-      }
+        if (!cancelled) setError(e.message);
+      } finally { inFlight = false; }
     };
     refresh();
     const id = setInterval(refresh, 4000);
-    return () => clearInterval(id);
+    return () => { cancelled = true; clearInterval(id); };
   }, [view, user, ready, focusedToken]);
   useEffect(() => {
     if (view === "admin" && user?.role === "admin")
@@ -692,6 +700,7 @@ export default function App() {
               <LogOut size={16} /> ออกจากระบบ
             </button>
           </div>
+          <StaffOrderSound sound={staffSound} />
           <div className="workspace-navigation">
             <div
               className="workspace-status-strip"
