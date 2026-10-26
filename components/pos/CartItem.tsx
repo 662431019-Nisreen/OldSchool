@@ -27,7 +27,7 @@ export default function CartItem({
     <article className="cart-item cart-item-with-photo" aria-label={line.name}>
       <img
         className="cart-item-photo"
-        src={product ? imageFor(product) : "/assets/logo.png"}
+        src={product ? imageFor(product) : "/assets/logo-coral.png"}
         alt={line.name}
       />
       <div className="cart-item-info">

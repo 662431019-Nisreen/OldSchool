@@ -1,4 +1,4 @@
-const CACHE = "old-school-pwa-v2";
+const CACHE = "old-school-pwa-v3";
 const SEEN = "old-school-push-seen-v1";
 self.addEventListener("install", (event) =>
   event.waitUntil(
@@ -6,8 +6,8 @@ self.addEventListener("install", (event) =>
       const cache = await caches.open(CACHE);
       await cache.addAll([
         "/offline.html",
-        "/assets/icon-192.png",
-        "/assets/icon-512.png",
+        "/assets/icon-coral-192.png",
+        "/assets/icon-coral-512.png",
       ]);
       await self.skipWaiting();
     })(),
@@ -61,8 +61,8 @@ self.addEventListener("push", (event) => {
       if (marker && (await seen.match(marker))) return;
       await self.registration.showNotification("☕ Old School Coffee", {
         body: payload.body,
-        icon: "/assets/icon-192.png",
-        badge: "/assets/icon-192.png",
+        icon: "/assets/icon-coral-192.png",
+        badge: "/assets/icon-coral-192.png",
         tag: payload.tag || "old-school-status",
         data: payload.data || { url: "/?view=orders" },
         renotify: true,

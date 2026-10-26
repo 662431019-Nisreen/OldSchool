@@ -80,7 +80,7 @@ export default function App() {
     products: initialProducts,
     categories: categories.slice(1),
     tables: 12,
-    logo: "/assets/logo.png",
+    logo: "/assets/logo-coral.png",
     cover: "/assets/hero.jpg",
     accepting: true,
   });

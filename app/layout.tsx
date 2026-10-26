@@ -11,7 +11,7 @@ export const metadata: Metadata = {
     statusBarStyle: "default",
   },
   manifest: "/manifest.webmanifest",
-  icons: { icon: "/assets/logo.png", apple: "/assets/icon-192.png" },
+  icons: { icon: "/assets/logo-coral.png", apple: "/assets/icon-coral-192.png" },
 };
 export const viewport: Viewport = {
   themeColor: "#64421e",

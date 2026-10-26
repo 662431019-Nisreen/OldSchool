@@ -136,7 +136,7 @@ export const basePrice = (p: Product) =>
   Math.min(...variants(p).map((v) => v.price));
 export function imageFor(p: Product) {
   if (p.image) return p.image;
-  if (p.price != null) return "/assets/logo.png";
+  if (p.price != null) return "/assets/logo-coral.png";
   const c = p.category;
   return c === "กาแฟ"
     ? p.id === "orange-coffee"

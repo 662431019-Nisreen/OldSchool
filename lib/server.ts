@@ -33,7 +33,7 @@ export async function getConfig() {
         categories: categories.slice(1),
         products: initialProducts,
         bankQr: "",
-        logo: "/assets/logo.png",
+        logo: "/assets/logo-coral.png",
         cover: "/assets/hero.jpg",
         accepting: true,
       };
