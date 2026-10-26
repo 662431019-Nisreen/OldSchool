@@ -121,7 +121,7 @@ export async function processPushEvent(
                 }
               : {
                   title: "☕ Old School Coffee",
-                  body: `เครื่องดื่มของคุณพร้อมแล้ว! ออเดอร์ #${number} กรุณามารับที่เคาน์เตอร์ค่ะ`,
+                  body: `เครื่องดื่มของคุณพร้อมแล้ว! ออเดอร์ #${number} กรุณามารับที่เคาน์เตอร์ครับ`,
                   tag: "old-school-" + number,
                   data: {
                     url: "/?view=orders#order=" + event.token,

@@ -100,7 +100,7 @@ await event("install");
 await event("activate");
 const token = crypto.randomUUID(),
   payload = {
-    body: "เครื่องดื่มของคุณพร้อมแล้ว! ออเดอร์ #OS-1234 กรุณามารับที่เคาน์เตอร์ค่ะ",
+    body: "เครื่องดื่มของคุณพร้อมแล้ว! ออเดอร์ #OS-1234 กรุณามารับที่เคาน์เตอร์ครับ",
     tag: "old-school-OS-1234",
     data: { url: "/?view=orders#order=" + token, eventId: "ready:1234" },
   };
