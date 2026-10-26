@@ -3564,3 +3564,17 @@ td button,
 .staff-push-panel small { display: block; color: #756957; font-size: 12px; line-height: 1.7; margin-top: 10px; }
 .staff-push-panel > button { margin-top: 12px; }
 .staff-push-confirmed { color: #38734d; }
+.shop-notifications { margin: 0 0 16px; padding: 12px 16px; border: 1px solid #e4d9c8; border-radius: 12px; background: #faf7f0; }
+.shop-notification-main { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.shop-notification-main > svg { color: #6c7a4e; flex-shrink: 0; }
+.shop-notification-status { flex: 1; min-width: 180px; }
+.shop-notification-status small { display: block; font-size: 12px; color: #756957; margin-top: 3px; }
+.shop-notification-main > button { min-height: 44px; }
+.shop-notification-details summary { cursor: pointer; font-size: 13px; color: #756957; padding: 8px 0; }
+.shop-notification-details[open] { width: 100%; order: 3; }
+.shop-notification-details p { font-size: 14px; line-height: 1.7; margin: 8px 0; }
+.shop-notification-tools { display: flex; flex-wrap: wrap; gap: 8px; }
+.shop-notification-feedback { margin: 10px 0 0; font-size: 14px; }
+.customer-notification-option { margin: 16px 0; }
+.customer-notification-option > summary { color: #756957; font-size: 14px; cursor: pointer; padding: 8px 0; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }

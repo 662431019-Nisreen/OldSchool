@@ -67,6 +67,7 @@ export const pushDeliveries = sqliteTable("push_deliveries", {
 });
 
 export const staffPushDevices = sqliteTable("staff_push_devices", {
+  deviceKey: text("device_key"),
   id: text("id").primaryKey(),
   userId: text("user_id").notNull(),
   sessionId: text("session_id").notNull(),

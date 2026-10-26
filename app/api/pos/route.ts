@@ -182,14 +182,21 @@ export async function POST(r: Request) {
       const session = cookie(r, "os_session") || "";
       await db.batch([
         db
-          .prepare("DELETE FROM staff_push_devices WHERE session_id=?")
-          .bind(session),
+          .prepare(
+            "DELETE FROM staff_push_devices WHERE session_id=? OR device_key=?",
+          )
+          .bind(session, cookie(r, "os_staff_device") || ""),
         db.prepare("DELETE FROM sessions WHERE id=?").bind(session),
       ]);
-      return json({ ok: true }, 200, {
+      const response = json({ ok: true }, 200, {
         "Set-Cookie":
           "os_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0",
       });
+      response.headers.append(
+        "Set-Cookie",
+        "os_staff_device=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0",
+      );
+      return response;
     }
     if (b.action === "order") {
       const owner = cookie(r, "os_guest");
@@ -278,26 +285,51 @@ export async function POST(r: Request) {
       if (!["admin", "staff"].includes(u.role))
         return json({ error: "ไม่มีสิทธิ์" }, 403);
       const session = cookie(r, "os_session") || "";
+      const existingKey = cookie(r, "os_staff_device") || "";
+      const deviceKey = /^[-a-zA-Z0-9]{20,80}$/.test(existingKey)
+        ? existingKey
+        : crypto.randomUUID();
+      const deviceHeader = {
+        "Set-Cookie": `os_staff_device=${deviceKey}; HttpOnly; SameSite=Strict; Path=/; Max-Age=31536000${new URL(r.url).protocol === "https:" ? "; Secure" : ""}`,
+      };
       if (b.action === "staff-push-register") {
         const { registerStaffPush } = await import("@/lib/push");
-        return json(await registerStaffPush(u.id, session, b.subscription));
+        return json(
+          await registerStaffPush(u.id, session, b.subscription, deviceKey),
+          200,
+          deviceHeader,
+        );
       }
-      if (typeof b.endpoint !== "string" || b.endpoint.length > 3000)
-        return json({ error: "อุปกรณ์ไม่ถูกต้อง" }, 400);
       if (b.action === "staff-push-disable") {
+        if (
+          b.endpoint != null &&
+          (typeof b.endpoint !== "string" || b.endpoint.length > 3000)
+        )
+          return json({ error: "อุปกรณ์ไม่ถูกต้อง" }, 400);
         await db
-          .prepare("DELETE FROM staff_push_devices WHERE id=? AND user_id=?")
-          .bind(b.endpoint, u.id)
+          .prepare(
+            "DELETE FROM staff_push_devices WHERE (id=? OR device_key=?) AND user_id=?",
+          )
+          .bind(b.endpoint || "", existingKey, u.id)
           .run();
         return json({ ok: true, registered: false });
       }
+      if (typeof b.endpoint !== "string" || b.endpoint.length > 3000)
+        return json({ error: "อุปกรณ์ไม่ถูกต้อง" }, 400);
       const row = await db
-        .prepare(
-          "SELECT s.expires FROM staff_push_devices d JOIN sessions s ON s.id=d.session_id WHERE d.id=? AND d.user_id=? AND d.session_id=? AND s.expires>?",
-        )
-        .bind(b.endpoint, u.id, session, Date.now())
+        .prepare("SELECT id FROM staff_push_devices WHERE id=? AND user_id=?")
+        .bind(b.endpoint, u.id)
         .first();
-      return json({ registered: !!row, expires: row?.expires || null });
+      if (row) {
+        // Rebind to this authenticated installation; existing permission needs no new prompt.
+        await db
+          .prepare(
+            "UPDATE staff_push_devices SET device_key=?,session_id=? WHERE id=? AND user_id=?",
+          )
+          .bind(deviceKey, session, b.endpoint, u.id)
+          .run();
+      }
+      return json({ registered: !!row }, 200, row ? deviceHeader : {});
     }
     if (b.action === "counter-order" || b.action === "edit-order") {
       if (!["admin", "staff"].includes(u.role))

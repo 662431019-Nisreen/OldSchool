@@ -1,0 +1,1 @@
+ALTER TABLE `staff_push_devices` ADD `device_key` text;

@@ -55,7 +55,7 @@ export async function processPushEvent(
     const rows = staffEvent
       ? await db
           .prepare(
-            "SELECT d.id,d.value FROM staff_push_devices d JOIN users u ON u.id=d.user_id JOIN sessions s ON s.id=d.session_id AND s.user_id=u.id WHERE u.active=1 AND u.role IN('admin','staff') AND s.expires>? AND d.created<=? LIMIT 50",
+            "SELECT d.id,d.value FROM staff_push_devices d JOIN users u ON u.id=d.user_id WHERE u.active=1 AND u.role IN('admin','staff') AND (d.device_key IS NOT NULL OR EXISTS(SELECT 1 FROM sessions s WHERE s.id=d.session_id AND s.user_id=u.id AND s.expires>?)) AND d.created<=? LIMIT 50",
           )
           .bind(Date.now(), event.created)
           .all()

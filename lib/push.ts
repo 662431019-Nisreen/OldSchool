@@ -35,7 +35,7 @@ export async function drainPendingPush() {
     await db.batch([
       db
         .prepare(
-          "DELETE FROM staff_push_devices WHERE session_id NOT IN(SELECT s.id FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.expires>? AND u.active=1 AND u.role IN('admin','staff'))",
+          "DELETE FROM staff_push_devices WHERE user_id NOT IN(SELECT id FROM users WHERE active=1 AND role IN('admin','staff')) OR (device_key IS NULL AND session_id NOT IN(SELECT id FROM sessions WHERE expires>?))",
         )
         .bind(Date.now()),
       db.prepare("DELETE FROM push_deliveries WHERE created<?").bind(cutoff),
@@ -150,6 +150,7 @@ export async function registerStaffPush(
   userId: string,
   sessionId: string,
   raw: any,
+  deviceKey: string,
 ) {
   const { validateSubscription } = await import("./webpush");
   if (!(await configuredPushKeys())) throw new Error("ระบบ Push ยังไม่พร้อม");
@@ -176,7 +177,7 @@ export async function registerStaffPush(
     );
   const saved = await db
     .prepare(
-      "INSERT INTO staff_push_devices(id,user_id,session_id,value,created) VALUES(?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET session_id=excluded.session_id,value=excluded.value WHERE staff_push_devices.user_id=excluded.user_id",
+      "INSERT INTO staff_push_devices(id,user_id,session_id,value,created,device_key) VALUES(?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET session_id=excluded.session_id,value=excluded.value,device_key=excluded.device_key WHERE staff_push_devices.user_id=excluded.user_id",
     )
     .bind(
       subscription.endpoint,
@@ -184,6 +185,7 @@ export async function registerStaffPush(
       sessionId,
       JSON.stringify(subscription),
       Date.now(),
+      deviceKey,
     )
     .run();
   if (!saved.meta.changes) throw new Error("ลงทะเบียนอุปกรณ์ไม่สำเร็จ");

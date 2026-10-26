@@ -2,9 +2,7 @@
 import { useEffect, useState } from "react";
 import { api, money, statusNames } from "@/lib/client";
 import StaffPushPanel from "@/components/pos/StaffPushPanel";
-import StaffOrderSound, {
-  useStaffOrderSound,
-} from "@/components/pos/StaffOrderSound";
+import { useStaffOrderSound } from "@/components/pos/StaffOrderSound";
 import TableContext from "@/components/pos/TableContext";
 import {
   qrContext,
@@ -571,13 +569,16 @@ export default function App() {
               ดูออเดอร์ทั้งหมดของอุปกรณ์นี้
             </button>
           )}
-          <PushPanel
-            orders={
-              focusedToken
-                ? orders.filter((o) => o.token === focusedToken)
-                : orders
-            }
-          />
+          <details className="customer-notification-option">
+            <summary>แจ้งเตือนเมื่อพร้อมรับ (ตัวเลือกเสริม)</summary>
+            <PushPanel
+              orders={
+                focusedToken
+                  ? orders.filter((o) => o.token === focusedToken)
+                  : orders
+              }
+            />
+          </details>
           {focusedToken && error && (
             <p className="pwa-warning">
               ไม่สามารถโหลดออเดอร์จากลิงก์นี้ได้
@@ -747,8 +748,7 @@ export default function App() {
               <LogOut size={16} /> ออกจากระบบ
             </button>
           </div>
-          <StaffOrderSound sound={staffSound} />
-          <StaffPushPanel />
+          <StaffPushPanel sound={staffSound} />
           <div className="workspace-navigation">
             <div
               className="workspace-status-strip"

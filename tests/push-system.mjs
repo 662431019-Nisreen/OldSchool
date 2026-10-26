@@ -415,8 +415,8 @@ try {
   await push.sendPushEvent("staff-new:" + revokedOrder.id);
   assert.equal(
     sent.length,
-    beforeRevoked,
-    "expired login cannot receive shop push",
+    beforeRevoked + 1,
+    "registered device continues after login expiry",
   );
   sqlite
     .prepare("UPDATE sessions SET expires=? WHERE id='admin-session'")
@@ -428,18 +428,80 @@ try {
   await push.sendPushEvent("staff-new:" + disabledOrder.id);
   assert.equal(
     sent.length,
-    beforeRevoked,
+    beforeRevoked + 1,
     "disabled staff cannot receive push",
   );
   sqlite.prepare("UPDATE users SET active=1 WHERE id='admin'").run();
+  // A new login recognizes the same device without permission/registration again.
+  sqlite
+    .prepare("INSERT INTO sessions(id,user_id,expires) VALUES(?,?,?)")
+    .run("admin-renewed", "admin", Date.now() + 100000);
+  const renewed = "os_session=admin-renewed";
+  assert.equal(
+    (
+      await request(
+        "staff-push-state",
+        { endpoint: shopDevice.endpoint },
+        renewed,
+      )
+    ).registered,
+    true,
+  );
+  const persistentKey = sqlite
+    .prepare("SELECT device_key FROM staff_push_devices WHERE id=?")
+    .get(shopDevice.endpoint).device_key;
+  assert(persistentKey);
+  // Another installation of the same account remains independently registered.
+  const otherShop = device("other-shop");
+  await request("staff-push-register", { subscription: otherShop }, admin);
+  // Even after this installation's login expired, its HttpOnly device cookie can revoke it on logout.
+  sqlite
+    .prepare("UPDATE sessions SET expires=0 WHERE id='admin-renewed'")
+    .run();
+  await request(
+    "logout",
+    {},
+    "os_session=admin-renewed; os_staff_device=" + persistentKey,
+  );
+  assert.equal(
+    sqlite
+      .prepare("SELECT count(*) n FROM staff_push_devices WHERE id=?")
+      .get(shopDevice.endpoint).n,
+    0,
+  );
+  assert.equal(
+    sqlite
+      .prepare("SELECT count(*) n FROM staff_push_devices WHERE id=?")
+      .get(otherShop.endpoint).n,
+    1,
+    "logout does not revoke a different installation",
+  );
+  // Existing session-bound registrations are not silently made durable by the schema migration.
+  sqlite
+    .prepare("UPDATE staff_push_devices SET device_key=NULL WHERE id=?")
+    .run(otherShop.endpoint);
+  sqlite
+    .prepare("UPDATE sessions SET expires=0 WHERE id='admin-session'")
+    .run();
+  const legacyOrder = (
+    await request("order", { ...payload, idem: crypto.randomUUID() })
+  ).order;
+  const beforeLegacy = sent.length;
+  await push.sendPushEvent("staff-new:" + legacyOrder.id);
+  assert.equal(
+    sent.length,
+    beforeLegacy,
+    "legacy expired registration is not authorized",
+  );
   await request("logout", {}, admin);
+
   assert.equal(
     sqlite.prepare("SELECT count(*) n FROM staff_push_devices").get().n,
     0,
     "logout revokes device",
   );
   console.log(
-    "PASS: staff push auth, session expiry, role ownership, automatic new-order event, dedupe, disable, expired cleanup and logout revocation",
+    "PASS: staff push auth, durable grant past session expiry, new-login recognition, legacy expiry, role ownership, automatic new-order event, dedupe, disable, expired cleanup and logout revocation",
   );
   console.log(
     "PASS: real API handlers + isolated SQLite; per-order device ownership; queued atomic status; automatic dedupe; late registration; manual cooldown; expired cleanup; failures and sanitized logs; private tracking tokens. All push transport was mocked, not device delivery.",
