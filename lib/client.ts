@@ -6,7 +6,7 @@ export const statusNames: Record<string, string> = {
   ready: "พร้อมรับ",
   done: "เสร็จสิ้น",
 };
-export async function api(action: string, body?: any) {
+export async function api(action: string, body?: any, signal?: AbortSignal) {
   const r = await fetch(
     "/api/pos" + (body ? "" : "?action=" + action),
     body
@@ -14,8 +14,9 @@ export async function api(action: string, body?: any) {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ action, ...body }),
+          signal,
         }
-      : { cache: "no-store" },
+      : { cache: "no-store", signal },
   );
   const d: any = await r.json();
   if (!r.ok) throw new Error(d.error || "เกิดข้อผิดพลาด");

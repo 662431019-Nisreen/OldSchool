@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { api, money, statusNames } from "@/lib/client";
+import { startVisiblePolling } from "@/lib/visible-polling";
 import StaffPushPanel from "@/components/pos/StaffPushPanel";
 import { useStaffOrderSound } from "@/components/pos/StaffOrderSound";
 import TableContext from "@/components/pos/TableContext";
@@ -235,40 +236,23 @@ export default function App() {
   }, [cart]);
   useEffect(() => {
     if (!ready) return;
-    let cancelled = false;
-    let inFlight = false;
-    const refresh = async () => {
-      if (inFlight || cancelled) return;
-      inFlight = true;
-      try {
-        const d = await api(
-          user && (view === "staff" || view === "admin") ? "orders" : "mine",
-        );
-        let next = d.orders || [];
-        if (focusedToken && view !== "admin" && view !== "staff") {
-          const tracked = await api("track", { token: focusedToken });
-          next = [
-            tracked.order,
-            ...next.filter((o: any) => o.token !== tracked.order.token),
-          ];
-        }
-        if (cancelled) return;
-        if (user && (view === "staff" || view === "admin"))
-          staffSound.receiveOrders(next);
+    const staff = Boolean(user && (view === "staff" || view === "admin"));
+    if (!staff && view !== "orders") return;
+    return startVisiblePolling(
+      async (signal) => {
+        // A private tracking link displays one order, so skip the device history.
+        const next =
+          !staff && focusedToken
+            ? [(await api("track", { token: focusedToken }, signal)).order]
+            : (await api(staff ? "orders" : "mine", undefined, signal))
+                .orders || [];
+        if (signal.aborted) return;
+        if (staff) staffSound.receiveOrders(next);
         setOrders(next);
         setError("");
-      } catch (e: any) {
-        if (!cancelled) setError(e.message);
-      } finally {
-        inFlight = false;
-      }
-    };
-    refresh();
-    const id = setInterval(refresh, 4000);
-    return () => {
-      cancelled = true;
-      clearInterval(id);
-    };
+      },
+      { onError: (e: any) => setError(e.message) },
+    );
   }, [view, user, ready, focusedToken]);
   useEffect(() => {
     if (view === "admin" && user?.role === "admin")
@@ -280,14 +264,15 @@ export default function App() {
         .catch((e) => notify(e.message));
   }, [view, user]);
   useEffect(() => {
-    if (view === "admin" || view === "staff") return;
-    const id = setInterval(() => {
-      api("menu")
-        .then((d) => setConfig(d.config))
-        .catch(() => {});
-    }, 10000);
-    return () => clearInterval(id);
-  }, [view]);
+    if (!ready || (view !== "shop" && view !== "orders")) return;
+    return startVisiblePolling(
+      async (signal) => {
+        const d = await api("menu", undefined, signal);
+        if (!signal.aborted) setConfig(d.config);
+      },
+      { immediate: false },
+    );
+  }, [view, ready]);
   const products: Product[] = config.products;
   const searchResults = products.filter(
     (p) =>
