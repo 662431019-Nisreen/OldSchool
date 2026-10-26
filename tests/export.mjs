@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import * as XLSX from "xlsx";
+import XLSX from "xlsx";
 const base = "http://localhost:5173";
 const denied = await fetch(base + "/api/export");
 assert.equal(denied.status, 403);
