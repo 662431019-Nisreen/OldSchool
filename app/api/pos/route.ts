@@ -13,6 +13,7 @@ import { newOrderPushStatement } from "@/lib/push-engine";
 import { env } from "cloudflare:workers";
 import { reportOrders } from "@/lib/report-server";
 import { summarizeSales } from "@/lib/reports";
+import { buildReceipt } from "@/lib/receipt";
 const json = (data: any, status = 200, headers: Record<string, string> = {}) =>
   Response.json(data, {
     status,
@@ -61,6 +62,28 @@ export async function GET(r: Request) {
         .all();
       return json({ orders: rows.results.map(publicOrder) });
     }
+    if (action === "receipt") {
+      const reply = (data: any, status = 200) =>
+        json(data, status, { "Cache-Control": "private, no-store" });
+      if (!u) return reply({ error: "กรุณาเข้าสู่ระบบ" }, 401);
+      if (!["admin", "staff"].includes(u.role))
+        return reply({ error: "ไม่มีสิทธิ์" }, 403);
+      const rawId = url.searchParams.get("id") || "";
+      const id = Number(rawId);
+      if (!/^[1-9]\d*$/.test(rawId) || !Number.isSafeInteger(id))
+        return reply({ error: "ออเดอร์ไม่ถูกต้อง" }, 400);
+      const row = await DB()
+        .prepare("SELECT * FROM orders WHERE id=?")
+        .bind(id)
+        .first<any>();
+      if (!row) return reply({ error: "ไม่พบออเดอร์" }, 404);
+      const config = await getConfig();
+      try {
+        return reply({ receipt: buildReceipt(unpack(row), config) });
+      } catch (e: any) {
+        return reply({ error: e.message }, 409);
+      }
+    }
     if (action === "report") {
       if (u?.role !== "admin") return json({ error: "เฉพาะผู้ดูแลระบบ" }, 403);
       try {
@@ -105,7 +128,13 @@ export async function GET(r: Request) {
     }
     return json({ error: "ไม่พบรายการ" }, 404);
   } catch (e: any) {
-    return json({ error: e.message }, 500);
+    return json(
+      { error: e.message },
+      500,
+      new URL(r.url).searchParams.get("action") === "receipt"
+        ? { "Cache-Control": "private, no-store" }
+        : {},
+    );
   }
 }
 export async function POST(r: Request) {
