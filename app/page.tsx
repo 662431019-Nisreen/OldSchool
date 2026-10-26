@@ -442,8 +442,6 @@ export default function App() {
         </div>
       )}
       {view === "shop" && (
-        <>
-        <TableContext table={table} type={orderType} maxTables={config.tables} onChange={applyOrderContext} />
         <Storefront
           config={config}
           query={query}
@@ -454,7 +452,6 @@ export default function App() {
           openProduct={openProduct}
           nav={nav}
         />
-        </>
       )}
       {orderEditor && user && (
         <OrderEditor
@@ -1296,14 +1293,14 @@ export default function App() {
                 <span>รวมทั้งหมด</span>
                 <strong className="price">฿{money(total)}</strong>
               </div>
-              {cart.length > 0 && (!table && orderType !== "takeaway") && <TableContext table={table} type={orderType} maxTables={config.tables} onChange={applyOrderContext} />}
+              {cart.length > 0 && <TableContext table={table} type={orderType} maxTables={config.tables} onChange={applyOrderContext} />}
               {cart.length > 0 && (
                 <p className="cart-order-context">
                   {orderType === "takeaway"
                     ? "รับกลับบ้าน · ชำระเงินที่เคาน์เตอร์"
                     : table > 0 && table <= config.tables
                       ? "โต๊ะ " + table + " · ชำระเงินที่เคาน์เตอร์"
-                      : "กรุณาสแกน QR ที่โต๊ะ หรือ QR สำหรับกลับบ้านก่อนสั่ง"}
+                      : "กรุณาเลือกโต๊ะ หรือรับกลับบ้านก่อนสั่ง"}
                 </p>
               )}
               <button
