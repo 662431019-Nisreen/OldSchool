@@ -1094,6 +1094,12 @@ footer small {
 .staff-order > .row {
   margin: 5px 0;
 }
+.staff-order > p {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  line-height: 1.5;
+}
 .staff-actions {
   display: flex;
   flex-wrap: wrap;
@@ -1246,6 +1252,20 @@ td button,
 .form-grid h2,
 .form-grid > p {
   grid-column: 1/-1;
+}
+.settings-save-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+  border-top: 1px solid var(--line);
+  padding-top: 18px;
+}
+.settings-save-actions > .primary {
+  width: fit-content;
+  min-height: 44px;
+  padding: 10px 20px;
+  border-radius: 12px;
+  box-shadow: 0 2px 5px rgb(73 47 29 / 12%);
 }
 .form-grid label,
 .edit-modal > label,

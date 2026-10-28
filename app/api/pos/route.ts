@@ -82,6 +82,13 @@ export async function GET(r: Request) {
         .all();
       return json({ config, users: users.results, user: u });
     }
+    if (action === "reset-orders-preview") {
+      if (u?.role !== "admin") return json({ error: "เฉพาะผู้ดูแลระบบ" }, 403);
+      const snapshot = await DB().prepare(
+        "SELECT count(*) AS count, coalesce(max(id),0) AS cutoff FROM orders",
+      ).first();
+      return json(snapshot);
+    }
     if (action === "push-key") {
       const { configuredPushKeys } = await import("@/lib/push");
       const keys = await configuredPushKeys();
@@ -604,6 +611,22 @@ export async function POST(r: Request) {
       return json({ ok: true, sent: push.accepted, push });
     }
     if (u.role !== "admin") return json({ error: "เฉพาะผู้ดูแลระบบ" }, 403);
+    if (b.action === "reset-orders") {
+      if (b.confirmation !== "ล้างออเดอร์ทั้งหมด" ||
+          !Number.isSafeInteger(b.cutoff) || b.cutoff < 1)
+        return json({ error: "กรุณาตรวจสอบและยืนยันล้างออเดอร์" }, 400);
+      const results = await db.batch([
+        db.prepare("DELETE FROM push_deliveries WHERE order_id<=?").bind(b.cutoff),
+        db.prepare("DELETE FROM push_events WHERE order_id<=?").bind(b.cutoff),
+        db.prepare("DELETE FROM push_order_devices WHERE order_id<=?").bind(b.cutoff),
+        db.prepare("DELETE FROM subscriptions WHERE NOT EXISTS(SELECT 1 FROM push_order_devices WHERE subscription_id=subscriptions.id)"),
+        db.prepare("DELETE FROM orders WHERE id<=?").bind(b.cutoff),
+        db.prepare("INSERT INTO audit(actor,action,target,created) VALUES(?,?,?,?)")
+          .bind(u.id, "reset-orders", `through:${b.cutoff}`, new Date().toISOString()),
+      ]);
+      // Keep the sequence: an old order number must never point at a new order.
+      return json({ ok: true, deleted: results[4].meta.changes });
+    }
     if (b.action === "config") {
       const c = b.config;
       if (
