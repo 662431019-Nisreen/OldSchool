@@ -1094,6 +1094,12 @@ footer small {
 .staff-order > .row {
   margin: 5px 0;
 }
+.staff-order > p {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  line-height: 1.5;
+}
 .staff-actions {
   display: flex;
   flex-wrap: wrap;
