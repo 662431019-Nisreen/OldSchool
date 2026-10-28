@@ -1222,9 +1222,12 @@ export default function App() {
                       )}
                     </label>
                   ))}
-                  <button className="primary" disabled={busy}>
-                    บันทึกการตั้งค่า
-                  </button>
+                  <div className="settings-save-actions">
+                    <button className="primary" disabled={busy}>
+                      <Check size={16} aria-hidden="true" />
+                      บันทึกการตั้งค่า
+                    </button>
+                  </div>
                   <p className="muted">
                     Push ต้องตั้งค่า VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY และ
                     VAPID_SUBJECT ฝั่ง Server
