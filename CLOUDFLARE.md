@@ -8,7 +8,7 @@
 
 ## แก้และ Deploy จาก VS Code
 
-ทำงานในโฟลเดอร์ `/Users/murshidasaifulislam/OldSchool`:
+ทำงานจากโฟลเดอร์ repository `OldSchool` ที่ clone ไว้ในเครื่องของผู้ดูแล:
 
 ```bash
 npm run build:cloudflare

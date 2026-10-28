@@ -1,6 +1,13 @@
 # OLD SCHOOL Coffee POS
 
-ระบบ POS ภาษาไทยสำหรับลูกค้า พนักงาน และผู้ดูแลร้าน ใช้ React 19, TypeScript, Vinext, Cloudflare Workers, D1 และ R2
+ระบบ POS ภาษาไทยสำหรับลูกค้า พนักงาน และผู้ดูแลร้าน ใช้ React 19, TypeScript, Vinext, Cloudflare Workers และ D1 โดยโหมด Sites ใช้ R2 เก็บรูป ส่วนโหมด Cloudflare ของร้านเก็บรูปใหม่ใน D1
+
+## รูปแบบการโฮสต์
+
+- **Sites:** [หน้าลูกค้า](https://old-school-coffee.asdareen112001.chatgpt.site/) และ [แอดมิน](https://old-school-coffee.asdareen112001.chatgpt.site/admin) ใช้ `.openai/hosting.json` และคำสั่ง build เดิม
+- **Cloudflare ของร้าน:** [หน้าลูกค้า](https://old-school-coffee.asdareen112001.workers.dev/) และ [แอดมิน](https://old-school-coffee.asdareen112001.workers.dev/admin) ใช้ `wrangler.cloudflare.jsonc` และคำสั่งลงท้าย `:cloudflare` ดู [CLOUDFLARE.md](CLOUDFLARE.md)
+- สองโดเมนใช้ฐานข้อมูล การเข้าสู่ระบบ และการลงทะเบียน Push แยกกัน ต้องเลือกโดเมนที่จะใช้งานก่อนพิมพ์ QR
+- การ Push GitHub เป็นการอัปเดตโค้ด ไม่ใช่การ Deploy ทั้งสองโหมดโดยอัตโนมัติ
 
 ## เริ่มใช้งาน
 
@@ -27,13 +34,15 @@ Setup ใช้ได้เมื่อยังไม่มีผู้ใช�
 
 ```sh
 npm ci
-npm run db:generate
 npm run build
-node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js d1 execute DB --local --config dist/server/wrangler.json --persist-to .wrangler/state --file drizzle/0000_round_rick_jones.sql
+# เฉพาะฐานข้อมูล local ใหม่ที่ยังไม่มีตาราง ลง SQL ทุกไฟล์ตามลำดับ
+for migration in drizzle/*.sql; do
+  node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js d1 execute DB --local --config dist/server/wrangler.json --persist-to .wrangler/state --file "$migration" || break
+done
 npm run dev
 ```
 
-ใช้ migration ครั้งเดียวต่อฐานข้อมูลใหม่ ไฟล์ `.dev.vars` เก็บ secrets สำหรับ local เท่านั้น `npm start -- --port 5173` เปิด build จริงเพื่อ QA โดยใช้ฐานข้อมูล local เดียวกัน
+ลูปข้างต้นใช้เฉพาะฐานข้อมูล local ใหม่เท่านั้น สำหรับฐานข้อมูลเดิมให้ลงเฉพาะไฟล์ migration ที่ยังไม่เคยใช้ตามลำดับ ห้ามรันลูปซ้ำกับฐานข้อมูลเดิม ใช้ `npm run db:generate` เฉพาะเมื่อเปลี่ยน schema และต้องสร้าง migration ใหม่ ไฟล์ `.dev.vars` เก็บ secrets สำหรับ local เท่านั้น เปิด build จริงเพื่อ QA ด้วย `npm start -- --port 5173 --env-file /absolute/path/to/.dev.vars` โดยใช้ฐานข้อมูล local เดียวกัน สำหรับโหมด Cloudflare ให้ทำตาม CLOUDFLARE.md
 
 ```sh
 npx tsc --noEmit
@@ -52,19 +61,19 @@ Integration test เขียนออเดอร์และบัญชีท
 - `components/pos/`: หน้าร้าน กล่องเลือกสินค้า และ QR โต๊ะ
 - `app/page.tsx`: state และหน้าจอการทำงานของแต่ละบทบาท
 - `app/api/pos/route.ts`: API ที่ตรวจสิทธิ์และ business rules
-- `app/api/upload/`: รูปที่ผู้ดูแลอัปโหลดเท่านั้น, JPG/PNG/WebP สูงสุด 5MB
+- `app/api/upload/`: รูปที่ผู้ดูแลอัปโหลดเท่านั้น, JPG/PNG/WebP; Sites ที่มี R2 สูงสุด 5 MiB ต่อรูป ส่วน Cloudflare ที่ไม่มี R2 สูงสุด 1 MiB ต่อรูป รวม 50 MiB
 - `db/schema.ts`, `drizzle/`: schema และ migration
 - `public/sw.js`, `public/manifest.webmanifest`: PWA และ Push
 
-D1 แยก orders, users, sessions, audit และ subscriptions ส่วน catalog/settings เป็น config aggregate สำหรับร้านขนาดเล็ก ไม่ใช้ localStorage เก็บออเดอร์กลาง; localStorage เก็บเพียงตะกร้าและ idempotency key
+D1 แยก orders, users, sessions, audit, subscriptions และตาราง Push ส่วน catalog/settings เป็น config aggregate สำหรับร้านขนาดเล็ก โหมดไม่มี R2 ใช้ uploaded_images และตารางควบคุมพื้นที่ใน D1 ด้วย ไม่ใช้ localStorage เป็นฐานข้อมูลออเดอร์กลาง; ใช้เก็บตะกร้า idempotency key บริบทโต๊ะ และสิทธิ์ติดตามออเดอร์บนอุปกรณ์
 
 ## การสั่งจาก QR
 
 - QR โต๊ะ: `/?table=3` ผูกโต๊ะ 3 โดยอัตโนมัติ
 - QR รับกลับบ้าน: `/?type=takeaway` ไม่ผูกหมายเลขโต๊ะ ดาวน์โหลดได้จาก Admin > โต๊ะ / QR
-- ลูกค้ายืนยันสั่งจากตะกร้าได้เลย ไม่มีหน้าเลือกรูปแบบรับสินค้า โต๊ะ หรือช่องทางชำระเงิน
-- เก็บบริบท QR ใน sessionStorage ของแท็บเพื่อให้รีเฟรชแล้วโต๊ะไม่หาย QR ใหม่มีสิทธิ์แทนบริบทเดิมเสมอ
-- ลิงก์ที่ไม่มี QR หรือบริบทเดิมดูเมนูได้ แต่ต้องสแกน QR ก่อนส่งออเดอร์
+- ลูกค้ายืนยันสั่งจากตะกร้าได้เลย เลือกหรือตรวจแก้โต๊ะ/รับกลับบ้านในตะกร้า ไม่มีหน้าตรวจสอบก่อนสั่งแยกหรือหน้าชำระเงินลูกค้า
+- เก็บบริบท QR ใน sessionStorage และจำบริบทในอุปกรณ์แบบมีอายุ 6 ชั่วโมง QR ใหม่มีสิทธิ์แทนบริบทเดิม และอัปเดต URL กับ manifest ตามการเลือกในตะกร้า
+- ลิงก์ที่ไม่มี QR หรือบริบทเดิมดูเมนูและเลือกโต๊ะหรือรับกลับบ้านในตะกร้าก่อนยืนยันได้ ไม่ต้องสแกนซ้ำ
 - พนักงานเลือกเงินสดหรือ QR ตอนยืนยันรับชำระที่เคาน์เตอร์
 
 ## สินค้าหมดและราคาเบเกอรี่
@@ -86,7 +95,7 @@ D1 แยก orders, users, sessions, audit และ subscriptions ส่วน
 - การยืนยันเงินสด/QR เป็นการตรวจโดยพนักงาน ไม่มีตรวจสลิปหรือเชื่อมบัญชีธนาคารอัตโนมัติ
 - ลูกค้าเข้าถึงเฉพาะออเดอร์ที่ owner cookie ตรงกัน ไม่ใช้หมายเลขออเดอร์เป็นสิทธิ์เข้าถึง
 - PBKDF2-SHA256 รหัสผ่าน, HttpOnly cookies, same-origin mutation checks, login attempt limit และ server-side roles
-- รายงานกรองวันที่ตาม Asia/Bangkok; API ส่งประวัติล่าสุดสูงสุด 500 ออเดอร์ (ต้องเพิ่ม pagination สำหรับข้อมูลเกินนี้)
+- รายงานกรองวันที่ตาม Asia/Bangkok; บอร์ดและประวัติออเดอร์โหลดล่าสุดสูงสุด 500 รายการ ส่วนรายงานและ Excel โหลดแยกตามช่วงที่เลือก สูงสุด 10,000 รายการ เกินแล้วให้เลือกช่วงสั้นลง
 
 ## Web Push และ PWA
 
@@ -95,7 +104,7 @@ D1 แยก orders, users, sessions, audit และ subscriptions ส่วน
 - `VAPID_PUBLIC_KEY`: P-256 uncompressed public key (base64url 65 bytes)
 - `VAPID_PRIVATE_KEY`: private JWK `d` (base64url 32 bytes), ต้องเป็น secret ฝั่ง Server เท่านั้น
 - `VAPID_SUBJECT`: HTTPS URL ของร้าน หรือ `mailto:` ที่ติดต่อได้
-- ทั้งสามค่ามีอยู่ในโฮสต์แล้ว API `push-key` ตรวจลายเซ็นคู่คีย์จริงก่อนรายงาน configured=true และส่งเฉพาะ public key
+- ต้องตั้งทั้งสามค่าในโฮสต์แต่ละแห่งให้ครบ ไม่คัดลอก Secrets ลง Git; API `push-key` ตรวจลายเซ็นคู่คีย์จริงก่อนรายงาน configured=true และส่งเฉพาะ public key
 - ห้ามเปลี่ยน key pair โดยไม่จำเป็น เพราะ subscription เดิมจะใช้คีย์เก่า หากเปลี่ยน ลูกค้าต้องเปิดรับแจ้งเตือนใหม่
 
 Manifest ตั้งชื่อ Old School Coffee และใช้ไอคอน 192/512 พร้อม apple-touch-icon ส่วน Service Worker เก็บเฉพาะหน้าบอกออฟไลน์กับไอคอน ไม่ cache API, HTML ลูกค้า หรือหน้าแอดมิน และไม่ส่งออเดอร์ออฟไลน์
@@ -183,7 +192,7 @@ Safari and an installed iOS home-screen app can have separate storage. Customers
 ### Shop notification workflow
 The unified workspace uses one **เปิดแจ้งเตือนร้าน** action, with a compact status and collapsed details (test, installation help, disable). The same click unlocks the local Web Audio chime and requests notification permission if the device supports background Push. A successful subscription is shown only after the backend acknowledges registration. If only foreground sound works, the UI explicitly shows a partial state. For iPadOS 16.4+, install `/admin` through Safari as **Old School ร้าน**, sign in, and enable once. No new environment variables or Firebase account are needed.
 
-When Push is registered, the order-poll chime is suppressed to avoid two sounds for one order; the system notification handles the alert both with the app open and locked. Foreground-only devices retain the poll chime, with an initial snapshot baseline and ID dedupe. On reload the browser may require a tap to unlock local audio, but a registered Push device continues without another audio gesture. Hardware volume, notification settings, Focus mode and connectivity still apply. Physical iPad reception/sound/click testing remains required.
+When Push is registered, the order-poll chime is suppressed to avoid two sounds for one order; the system notification handles the alert both with the app open and locked. Foreground-only devices retain the poll chime, with an initial snapshot baseline and ID dedupe. On reload the browser may require a tap to unlock local audio, but a registered Push device continues without another audio gesture. Hardware volume, notification settings, Focus mode and connectivity still apply. Physical iPad reception/sound/click testing remains required for each deployment origin.
 
 Migration `0003` appends nullable `device_key` to staff registrations. New or authenticated recognized installations receive a separate durable notification grant and a one-year HttpOnly/SameSite cookie used only to revoke that installation. Grant delivery still checks the account is active and staff/admin; the 12-hour admin login continues protecting the workspace, but no longer ends an authorized device's Push grant. Logout (including after session expiry), account deactivation, explicit disable, and provider 404/410 stop deliveries. Logout revokes only the installation/session, not unrelated devices. Old registrations with no device grant retain session-expiry checks until an authenticated installation check upgrades them; schema migration alone does not broaden old grants.
 
@@ -195,3 +204,35 @@ Validation: `tests/push-system.mjs` exercises the actual API handlers/engine aga
 The report now includes a paginated daily summary with Bangkok order dates, paid sales, cash/transfer splits, pending totals, and paid cup/piece counts. Selecting a date drills into that day's existing report. Day/month/short ranges (up to 366 days) include zero-order days; All and longer ranges list recorded order dates. The report and export share `summarizeDailySales`, `reportOrders` and the existing paid/refund rules. Grouping remains by the order date, with its latest corrections, as indicated in the UI.
 
 Exports use the selected date/month/range/all parameters and name the file accordingly. `DailySummary` opens first, followed by existing Orders/Revisions, normalized `RevisionItems`, and Summary. Audit snapshots use readable menu/option/quantity/price text instead of JSON. The normalized detail sheet keeps long revisions readable without relying on giant spreadsheet rows. `xlsx-js-style` provides wrapped cells, column widths, header colors and numeric formats; `xlsx` remains the independent workbook parser in regression tests. No migration or new environment variable is required. Old downloaded files are unchanged: download a fresh export after updating.
+
+
+## ล้างออเดอร์และเริ่มคิวใหม่
+
+- แอดมินเข้า ตั้งค่าร้าน → ล้างข้อมูลออเดอร์ → ตรวจสอบก่อนล้างออเดอร์
+- ต้องพิมพ์ `ล้างออเดอร์ทั้งหมด` และยืนยันก่อนลบถาวร ระบบลบรายการ ยอดขาย ประวัติแก้ไขในออเดอร์ และข้อมูล Push ของรายการที่ตรวจไว้ เมนู รูป โต๊ะ บัญชี และอุปกรณ์แจ้งเตือนร้านยังอยู่
+- ออเดอร์ที่เข้าหลังจุดตรวจสอบจะไม่ถูกลบ หากยังมีออเดอร์เหลือจะไม่เริ่มคิวใหม่
+- เมื่อล้างจนไม่มีออเดอร์ คิวที่แสดงจะเริ่ม `OS-0001` อัตโนมัติ หากล้างด้วยเวอร์ชันเก่าไปแล้ว ใช้ปุ่ม “เริ่มคิวใหม่ที่ 1” ได้เฉพาะเมื่อไม่มีออเดอร์
+- เก็บ ID ภายในให้ไม่ซ้ำ ใช้ `config.order_queue_offset` และ snapshot `payload.queueNumber` สำหรับเลขคิวที่แสดง ทั้งหน้าลูกค้า ร้าน รายงาน และข้อความ Push ใช้เลขเดียวกัน การติดตามยังใช้ token ที่คาดเดายาก ไม่ใช้เลขคิวเป็นสิทธิ์
+- ส่งออก Excel ก่อนล้างหากต้องการเก็บยอด และอย่าล้างระหว่างขายจริง ทดสอบสิทธิ์ การลบแบบมีขอบเขต และคิว 1/2 ด้วย `node tests/push-system.mjs`
+
+## เอกสารและภาพส่งมอบ
+
+- `handover/`: คู่มือ PDF/Word รายการตรวจรับ แบบกรอกผู้ดูแลและเงื่อนไขบริการ และข้อความสำหรับส่งบัญชีส่วนตัว ไม่มีรหัสผ่านจริง
+- `handover/qr/`: QR โต๊ะ 1–20 และรับกลับบ้าน พร้อมตารางลิงก์ ชุดนี้ผูกกับโดเมน **chatgpt.site** เท่านั้น หากใช้ workers.dev ต้องสร้าง QR ใหม่จากเว็บปลายทาง
+- `design/menu-samples/`: ภาพเมนูมอคค่าและแดงโซดาที่สร้างด้วย AI สำหรับเลือกใช้งาน ไม่ใช่ภาพเครื่องดื่มจริง และไม่ได้เปลี่ยนรูปสินค้าในฐานข้อมูลอัตโนมัติ
+- กรอกข้อมูลติดต่อและตกลงเงื่อนไขดูแลก่อนส่งมอบ ส่งรหัสผ่านผ่านช่องทางส่วนตัวแยกจากคู่มือและ QR
+- Git เก็บซอร์ส เอกสาร และรูป static แต่ไม่รวมฐานข้อมูลออนไลน์ รูปอัปโหลดใน D1/R2 หรือ Secrets ต้องสำรองและส่งมอบส่วนเหล่านี้แยกอย่างปลอดภัย
+
+## ตรวจสอบหลังรวมงานล่าสุด
+
+```sh
+npx tsc --noEmit
+node tests/push-system.mjs
+node tests/push-maintenance.mjs
+node tests/push-recovery.mjs
+node tests/order-query-load.mjs
+node tests/image-storage.mjs
+npm run build
+```
+
+ชุดข้างต้นใช้ฐานข้อมูลหรือปลายทางจำลอง ไม่ส่ง Push จริง และไม่ยืนยันโควตา Cloudflare หรือการรับแจ้งเตือนบนอุปกรณ์จริง ชุดทดสอบ integration/report/export ต้องเปิดเซิร์ฟเวอร์ local และลง migrations ก่อน ห้ามชี้ไปยังฐานข้อมูลขายจริง
