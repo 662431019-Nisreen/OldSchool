@@ -506,6 +506,29 @@ try {
   console.log(
     "PASS: real API handlers + isolated SQLite; per-order device ownership; queued atomic status; automatic dedupe; late registration; manual cooldown; expired cleanup; failures and sanitized logs; private tracking tokens. All push transport was mocked, not device delivery.",
   );
+  sqlite.prepare("INSERT INTO sessions(id,user_id,expires) VALUES(?,?,?)")
+    .run("reset-session", "admin", Date.now() + 100000);
+  const resetAdmin = "os_session=reset-session";
+  assert.equal((await request("reset-orders-preview", null, staff)).status, 403);
+  assert.equal((await request("reset-orders", {cutoff: 1, confirmation: "ล้างออเดอร์ทั้งหมด"})).status, 401);
+  assert.equal((await request("reset-orders", {cutoff: 1, confirmation: "ล้างออเดอร์ทั้งหมด"}, staff)).status, 403);
+  const snapshot = await request("reset-orders-preview", null, resetAdmin);
+  assert(snapshot.count > 0);
+  assert.equal((await request("reset-orders", {cutoff: snapshot.cutoff, confirmation: "wrong"}, resetAdmin)).status, 400);
+  const newer = (await request("order", {...payload, idem: crypto.randomUUID()})).order;
+  const configBefore = JSON.stringify(sqlite.prepare("SELECT * FROM config").all());
+  const usersBefore = JSON.stringify(sqlite.prepare("SELECT * FROM users").all());
+  const cleared = await request("reset-orders", {cutoff: snapshot.cutoff, confirmation: "ล้างออเดอร์ทั้งหมด"}, resetAdmin);
+  assert.equal(cleared.deleted, snapshot.count);
+  assert.equal(sqlite.prepare("SELECT count(*) n FROM orders").get().n, 1);
+  assert.equal(sqlite.prepare("SELECT id FROM orders").get().id, newer.id);
+  for (const table of ["push_events", "push_deliveries", "push_order_devices"])
+    assert.equal(sqlite.prepare(`SELECT count(*) n FROM ${table} WHERE order_id<=?`).get(snapshot.cutoff).n, 0);
+  assert.equal(JSON.stringify(sqlite.prepare("SELECT * FROM config").all()), configBefore);
+  assert.equal(JSON.stringify(sqlite.prepare("SELECT * FROM users").all()), usersBefore);
+  assert.equal((await request("reset-orders", {cutoff: snapshot.cutoff, confirmation: "ล้างออเดอร์ทั้งหมด"}, resetAdmin)).deleted, 0);
+  assert.equal(sqlite.prepare("SELECT seq FROM sqlite_sequence WHERE name='orders'").get().seq, newer.id);
+  console.log("PASS: admin-only order reset, explicit confirmation, notification cleanup, concurrent new-order preservation, idempotent repeat, retained catalog/accounts and sequence");
 } finally {
   globalThis.fetch = originalFetch;
   sqlite.close();

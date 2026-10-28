@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { api, money, statusNames } from "@/lib/client";
 import { startVisiblePolling } from "@/lib/visible-polling";
 import StaffPushPanel from "@/components/pos/StaffPushPanel";
+import ResetOrders from "@/components/pos/ResetOrders";
 import { useStaffOrderSound } from "@/components/pos/StaffOrderSound";
 import TableContext from "@/components/pos/TableContext";
 import {
@@ -1148,6 +1149,7 @@ export default function App() {
                 </div>
               )}
               {adminTab === "settings" && (
+                <>
                 <form
                   className="panel form-grid"
                   onSubmit={(e) => {
@@ -1228,6 +1230,8 @@ export default function App() {
                     VAPID_SUBJECT ฝั่ง Server
                   </p>
                 </form>
+                <ResetOrders />
+                </>
               )}
             </>
           ) : null}
