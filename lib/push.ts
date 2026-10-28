@@ -29,26 +29,38 @@ export async function sendPushEvent(id: string) {
 let cleanupAt = 0;
 export async function drainPendingPush() {
   const db = DB();
-  if (Date.now() > cleanupAt) {
-    cleanupAt = Date.now() + 86400000;
-    const cutoff = Date.now() - 30 * 86400000;
-    await db.batch([
-      db
-        .prepare(
-          "DELETE FROM staff_push_devices WHERE user_id NOT IN(SELECT id FROM users WHERE active=1 AND role IN('admin','staff')) OR (device_key IS NULL AND session_id NOT IN(SELECT id FROM sessions WHERE expires>?))",
-        )
-        .bind(Date.now()),
-      db.prepare("DELETE FROM push_deliveries WHERE created<?").bind(cutoff),
-      db.prepare("DELETE FROM push_events WHERE created<?").bind(cutoff),
-      db
-        .prepare(
-          "DELETE FROM push_order_devices WHERE order_id IN(SELECT id FROM orders WHERE status='done') OR created<?",
-        )
-        .bind(cutoff),
-      db.prepare(
-        "DELETE FROM subscriptions WHERE NOT EXISTS(SELECT 1 FROM push_order_devices WHERE subscription_id=subscriptions.id)",
-      ),
-    ]);
+  const now = Date.now();
+  if (now > cleanupAt) {
+    // Set before awaiting so concurrent requests in this isolate do not repeat
+    // maintenance. Cutoff indexes keep a cold isolate from scanning old logs.
+    cleanupAt = now + 86400000;
+    const cutoff = now - 30 * 86400000;
+    try {
+      await db.batch([
+        db
+          .prepare(
+            "DELETE FROM staff_push_devices WHERE user_id NOT IN(SELECT id FROM users WHERE active=1 AND role IN('admin','staff')) OR (device_key IS NULL AND session_id NOT IN(SELECT id FROM sessions WHERE expires>?))",
+          )
+          .bind(now),
+        db.prepare("DELETE FROM push_deliveries WHERE created<?").bind(cutoff),
+        db.prepare("DELETE FROM push_events WHERE created<?").bind(cutoff),
+        db
+          .prepare("DELETE FROM push_order_devices WHERE created<?")
+          .bind(cutoff),
+        // Drive this join from device bindings, rather than scanning every
+        // completed order in the shop's full sales history.
+        db.prepare(
+          "DELETE FROM push_order_devices WHERE id IN(SELECT d.id FROM push_order_devices d CROSS JOIN orders o WHERE o.id=d.order_id AND o.status='done')",
+        ),
+        db.prepare(
+          "DELETE FROM subscriptions WHERE NOT EXISTS(SELECT 1 FROM push_order_devices WHERE subscription_id=subscriptions.id)",
+        ),
+      ]);
+    } catch {
+      cleanupAt = now + 60_000;
+      console.error("push_cleanup_failed");
+      // Housekeeping failure must not prevent a new-order notification.
+    }
   }
   const rows = await db
     .prepare(

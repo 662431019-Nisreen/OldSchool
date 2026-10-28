@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { Download, ChevronLeft, ChevronRight } from "lucide-react";
+import { Download, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
 import { money, statusNames } from "@/lib/client";
 import { bangkokDay, paymentSplit } from "@/lib/reports";
 export default function SalesReport() {
@@ -68,10 +68,8 @@ export default function SalesReport() {
       }
     }
     load();
-    const timer = setInterval(load, 15000);
     return () => {
       controller.abort();
-      clearInterval(timer);
     };
   }, [params, invalid, retry]);
   const s = data?.summary;
@@ -180,10 +178,19 @@ export default function SalesReport() {
               </label>
             </>
           )}
+          <button
+            type="button"
+            disabled={loading || invalid}
+            style={{ alignSelf: "flex-end" }}
+            onClick={() => setRetry((n) => n + 1)}
+          >
+            <RefreshCw size={17} /> อัปเดตรายงาน
+          </button>
         </div>
         <p className="report-basis">
           เลือกตามวันที่สั่งออเดอร์ (เวลาประเทศไทย) ·
-          ยอดสุทธิรวมการแก้ไขล่าสุดของออเดอร์ในช่วงนี้
+          ยอดสุทธิรวมการแก้ไขล่าสุดของออเดอร์ในช่วงนี้ ·
+          กดอัปเดตรายงานเพื่อดูข้อมูลล่าสุด
         </p>
       </div>
       {loading && (
