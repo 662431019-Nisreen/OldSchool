@@ -1,0 +1,18 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "old-school-coffee",
+  "account_id": "6afdc9bfca3ba8e783397b2baa427dfc",
+  "main": "./worker/index.ts",
+  "compatibility_date": "2026-05-15",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "preview_urls": false,
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "old-school-coffee",
+      "database_id": "f5dd3b6d-4613-4108-ba5a-9a4f9db9191b",
+      "migrations_dir": "./drizzle",
+    },
+  ],
+}

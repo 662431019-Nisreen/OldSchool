@@ -29,6 +29,20 @@
       "when": 1793000079288,
       "tag": "0003_goofy_sabra",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1793176582290,
+      "tag": "0004_free_query_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1793176711557,
+      "tag": "0005_free_image_storage",
+      "breakpoints": true
     }
   ]
 }

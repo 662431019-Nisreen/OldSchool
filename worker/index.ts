@@ -1,6 +1,9 @@
 import handler from "vinext/server/fetch-handler";
 import { runWithConnectorBinding } from "../lib/connector-context";
 import type { ConnectorBinding } from "../lib/connector-contract.mjs";
+import { createPushRecoverySchedule } from "../lib/push-recovery";
+
+const pushRecovery = createPushRecoverySchedule();
 
 const worker = {
   async fetch(
@@ -34,11 +37,14 @@ const worker = {
     const response = await runWithConnectorBinding(binding, () =>
       handler.fetch(request, env, ctx),
     );
-    if (new URL(request.url).pathname === "/api/pos") {
+    if (pushRecovery.shouldCheck(request, response)) {
       ctx.waitUntil(
         import("../lib/push")
           .then(({ drainPendingPush }) => drainPendingPush())
-          .catch(() => console.error("push_queue_check_failed")),
+          .catch(() => {
+            pushRecovery.failed();
+            console.error("push_queue_check_failed");
+          }),
       );
     }
     return response;
