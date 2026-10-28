@@ -30,10 +30,16 @@ export default function ResetOrders() {
   return <details className="panel">
     <summary>ล้างข้อมูลออเดอร์</summary>
     <p>ลบออเดอร์ ยอดขาย ประวัติแก้ไข และแจ้งเตือนของออเดอร์อย่างถาวร เก็บเมนู รูปสินค้า โต๊ะ บัญชี และการแจ้งเตือนเครื่องของร้านไว้</p>
-    <p>เลขออเดอร์ถัดไปจะนับต่อ เพื่อไม่ให้ซ้ำกับออเดอร์เก่า</p>
+    <p>เมื่อล้างจนไม่มีออเดอร์ คิวถัดไปจะเริ่มที่ OS-0001</p>
     <button type="button" disabled={busy} onClick={preview}>ตรวจสอบก่อนล้างออเดอร์</button>
     {snapshot && <div className="form-grid">
       <p>พบ {snapshot.count} ออเดอร์ (ถึงหมายเลข {snapshot.cutoff}) ออเดอร์ใหม่หลังจากตรวจสอบนี้จะไม่ถูกลบ</p>
+      {snapshot.count === 0 && <button type="button" disabled={busy} onClick={async () => {
+        setBusy(true);
+        try { await api("restart-order-queue", {}); setMessage("ตั้งค่าคิวถัดไปเป็น OS-0001 แล้ว"); }
+        catch (e: any) { setMessage(e.message); }
+        finally { setBusy(false); }
+      }}>เริ่มคิวใหม่ที่ 1</button>}
       {snapshot.count > 0 && <>
         <label>พิมพ์ “ล้างออเดอร์ทั้งหมด” เพื่อยืนยัน
           <input value={confirmation} onChange={e => setConfirmation(e.target.value)} autoComplete="off" />

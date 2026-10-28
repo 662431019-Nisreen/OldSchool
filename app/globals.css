@@ -1095,9 +1095,9 @@ footer small {
   margin: 5px 0;
 }
 .staff-order > p {
-  font-size: 13px;
+  font-size: 16px;
   font-weight: 600;
-  color: var(--muted);
+  color: var(--brown);
   line-height: 1.5;
 }
 .staff-actions {

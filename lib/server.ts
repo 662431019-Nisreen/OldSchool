@@ -107,10 +107,11 @@ export async function log(actor: string, action: string, target: string) {
     .run();
 }
 export function unpack(o: any) {
+  const payload = JSON.parse(o.payload);
   return {
     ...o,
-    ...JSON.parse(o.payload),
-    number: "OS-" + String(o.id).padStart(4, "0"),
+    ...payload,
+    number: "OS-" + String(payload.queueNumber ?? o.id).padStart(4, "0"),
     owner: undefined,
     idem: undefined,
     payload: undefined,

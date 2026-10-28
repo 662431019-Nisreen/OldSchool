@@ -234,7 +234,7 @@ export async function POST(r: Request) {
       await db.batch([
         db
           .prepare(
-            "INSERT OR IGNORE INTO orders(token,owner,idem,payload,total,created) VALUES(?,?,?,?,?,?)",
+            "INSERT OR IGNORE INTO orders(token,owner,idem,payload,total,created) VALUES(?,?,?,json_set(?, '$.queueNumber', (SELECT coalesce((SELECT seq FROM sqlite_sequence WHERE name='orders'),0)+1-coalesce((SELECT CAST(value AS INTEGER) FROM config WHERE key='order_queue_offset'),0))),?,?)",
           )
           .bind(
             token,
@@ -503,7 +503,7 @@ export async function POST(r: Request) {
         await db.batch([
           db
             .prepare(
-              "INSERT OR IGNORE INTO orders(token,owner,idem,payload,total,created) VALUES(?,?,?,?,?,?)",
+              "INSERT OR IGNORE INTO orders(token,owner,idem,payload,total,created) VALUES(?,?,?,json_set(?, '$.queueNumber', (SELECT coalesce((SELECT seq FROM sqlite_sequence WHERE name='orders'),0)+1-coalesce((SELECT CAST(value AS INTEGER) FROM config WHERE key='order_queue_offset'),0))),?,?)",
             )
             .bind(token, owner, b.idem, JSON.stringify(payload), total, now),
           newOrderPushStatement(db, token),
@@ -621,11 +621,17 @@ export async function POST(r: Request) {
         db.prepare("DELETE FROM push_order_devices WHERE order_id<=?").bind(b.cutoff),
         db.prepare("DELETE FROM subscriptions WHERE NOT EXISTS(SELECT 1 FROM push_order_devices WHERE subscription_id=subscriptions.id)"),
         db.prepare("DELETE FROM orders WHERE id<=?").bind(b.cutoff),
+        db.prepare("INSERT OR REPLACE INTO config(key,value) SELECT 'order_queue_offset', CAST(coalesce((SELECT seq FROM sqlite_sequence WHERE name='orders'),0) AS TEXT) WHERE NOT EXISTS(SELECT 1 FROM orders)"),
         db.prepare("INSERT INTO audit(actor,action,target,created) VALUES(?,?,?,?)")
           .bind(u.id, "reset-orders", `through:${b.cutoff}`, new Date().toISOString()),
       ]);
-      // Keep the sequence: an old order number must never point at a new order.
+      // Internal IDs stay unique; only the displayed queue restarts when empty.
       return json({ ok: true, deleted: results[4].meta.changes });
+    }
+    if (b.action === "restart-order-queue") {
+      const result = await db.prepare("INSERT OR REPLACE INTO config(key,value) SELECT 'order_queue_offset', CAST(coalesce((SELECT seq FROM sqlite_sequence WHERE name='orders'),0) AS TEXT) WHERE NOT EXISTS(SELECT 1 FROM orders)").run();
+      if (!result.meta.changes) return json({error: "เริ่มคิวใหม่ได้เมื่อไม่มีออเดอร์เท่านั้น"}, 409);
+      return json({ok: true});
     }
     if (b.action === "config") {
       const c = b.config;

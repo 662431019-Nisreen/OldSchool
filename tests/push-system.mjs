@@ -528,6 +528,15 @@ try {
   assert.equal(JSON.stringify(sqlite.prepare("SELECT * FROM users").all()), usersBefore);
   assert.equal((await request("reset-orders", {cutoff: snapshot.cutoff, confirmation: "ล้างออเดอร์ทั้งหมด"}, resetAdmin)).deleted, 0);
   assert.equal(sqlite.prepare("SELECT seq FROM sqlite_sequence WHERE name='orders'").get().seq, newer.id);
+  assert.equal((await request("restart-order-queue", {}, staff)).status, 403);
+  assert.equal((await request("restart-order-queue", {}, resetAdmin)).status, 409);
+  await request("reset-orders", {cutoff: newer.id, confirmation: "ล้างออเดอร์ทั้งหมด"}, resetAdmin);
+  assert.equal((await request("restart-order-queue", {}, resetAdmin)).status, 200);
+  const firstQueue = (await request("order", {...payload, idem: crypto.randomUUID()})).order;
+  assert.equal(firstQueue.number, "OS-0001");
+  assert(firstQueue.id > newer.id, "internal IDs are never reused");
+  const secondQueue = (await request("counter-order", {...payload, idem: crypto.randomUUID()}, resetAdmin)).order;
+  assert.equal(secondQueue.number, "OS-0002");
   console.log("PASS: admin-only order reset, explicit confirmation, notification cleanup, concurrent new-order preservation, idempotent repeat, retained catalog/accounts and sequence");
 } finally {
   globalThis.fetch = originalFetch;

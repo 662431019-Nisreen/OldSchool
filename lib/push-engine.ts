@@ -105,7 +105,7 @@ export async function processPushEvent(
             status = "expired";
             error = "subscription_expired";
           } else {
-            const number = "OS-" + String(event.order_id).padStart(4, "0");
+            const number = "OS-" + String(JSON.parse(event.payload).queueNumber ?? event.order_id).padStart(4, "0");
             const order = staffEvent ? JSON.parse(event.payload) : null;
             const payload = staffEvent
               ? {
