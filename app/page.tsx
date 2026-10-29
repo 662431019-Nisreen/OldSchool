@@ -4,6 +4,7 @@ import { api, money, statusNames } from "@/lib/client";
 import { startVisiblePolling } from "@/lib/visible-polling";
 import StaffPushPanel from "@/components/pos/StaffPushPanel";
 import ResetOrders from "@/components/pos/ResetOrders";
+import DeleteOrderButton from "@/components/pos/DeleteOrderButton";
 import ImageUploadField from "@/components/pos/ImageUploadField";
 import { useStaffOrderSound } from "@/components/pos/StaffOrderSound";
 import TableContext from "@/components/pos/TableContext";
@@ -55,8 +56,6 @@ import {
   Image as ImageIcon,
 } from "lucide-react";
 import {
-  initialProducts,
-  categories,
   variants,
   basePrice,
   imageFor,
@@ -80,12 +79,12 @@ export default function App() {
     subtitle: "Coffee & Good Days",
     open: "08:00",
     close: "18:00",
-    products: initialProducts,
-    categories: categories.slice(1),
+    products: [],
+    categories: [],
     tables: 12,
-    logo: "/assets/logo-coral.png",
-    cover: "/assets/hero.jpg",
-    accepting: true,
+    logo: "",
+    cover: "",
+    accepting: false,
   });
   const [view, setView] = useState("shop"),
     [category, setCategory] = useState("เมนูแนะนำ"),
@@ -117,6 +116,8 @@ export default function App() {
   const [orderEditor, setOrderEditor] = useState<any>(null);
   const [imageUploading, setImageUploading] = useState(false);
   const imageUploadingRef = useRef(false);
+  const deletedOrderIds = useRef(new Set<number>());
+  const bootstrapped = useRef(false);
   const [configConflict, setConfigConflict] = useState("");
   const staffSound = useStaffOrderSound(
     user && (view === "admin" || view === "staff") ? user.id : null,
@@ -152,11 +153,22 @@ export default function App() {
     history.replaceState(null, "", url);
   };
   const load = async () => {
+    setError("");
     try {
       const d = await api("menu");
       setConfig(d.config);
       setUser(d.user);
-      setError("");
+      if (!bootstrapped.current) {
+        // Resolve the workspace in the same load as its data, before revealing UI.
+        if (location.pathname === "/staff" || location.pathname === "/admin") {
+          if (d.user) {
+            setView(d.user.role === "admin" ? "admin" : "staff");
+            setAdminTab("orders");
+            window.history.replaceState(null, "", "/admin");
+          } else setLogin(true);
+        }
+        bootstrapped.current = true;
+      }
       setReady(true);
     } catch (e: any) {
       setError("ยังเชื่อมต่อระบบไม่ได้: " + e.message);
@@ -215,15 +227,6 @@ export default function App() {
       setCartOpen(true);
     }
     if (location.pathname === "/login") setLogin(true);
-    if (location.pathname === "/staff" || location.pathname === "/admin") {
-      api("menu").then((d) => {
-        if (d.user) {
-          setView(d.user.role === "admin" ? "admin" : "staff");
-          setAdminTab("orders");
-          window.history.replaceState(null, "", "/admin");
-        } else setLogin(true);
-      });
-    }
     try {
       setCart(JSON.parse(localStorage.getItem("os_cart") || "[]"));
       const saved = localStorage.getItem("os_idem") || crypto.randomUUID();
@@ -252,8 +255,11 @@ export default function App() {
             : (await api(staff ? "orders" : "mine", undefined, signal))
                 .orders || [];
         if (signal.aborted) return;
-        if (staff) staffSound.receiveOrders(next);
-        setOrders(next);
+        const visibleOrders = next.filter(
+          (order: any) => !deletedOrderIds.current.has(order.id),
+        );
+        if (staff) staffSound.receiveOrders(visibleOrders);
+        setOrders(visibleOrders);
         setError("");
       },
       { onError: (e: any) => setError(e.message) },
@@ -362,6 +368,12 @@ export default function App() {
     setBusy(true);
     try {
       const d = await api(action, data);
+      if (action === "delete-order") {
+        deletedOrderIds.current.add(data.id);
+        setOrders((current) => current.filter((order) => order.id !== data.id));
+        notify("ลบออเดอร์ " + d.number + " แล้ว");
+        return true;
+      }
       if (action === "call" || d.push) {
         notify(
           d.push?.accepted
@@ -382,7 +394,18 @@ export default function App() {
       }
       return true;
     } catch (e: any) {
-      if (action === "config" && e.status === 409) {
+      if (action === "delete-order" && [404, 409].includes(e.status)) {
+        if (e.status === 404) {
+          deletedOrderIds.current.add(data.id);
+          setOrders((current) => current.filter((order) => order.id !== data.id));
+        } else {
+          try {
+            const latest = await api("orders");
+            setOrders(latest.orders.filter((order: any) => !deletedOrderIds.current.has(order.id)));
+          } catch {}
+        }
+        notify(e.message);
+      } else if (action === "config" && e.status === 409) {
         let message = e.message;
         try {
           const latest = await api("admin");
@@ -413,6 +436,18 @@ export default function App() {
     setQuery("");
     window.scrollTo(0, 0);
   };
+  if (!ready) {
+    return (
+      <main className="initial-loading" aria-busy={!error}>
+        <section className="initial-loading-panel" role={error ? "alert" : "status"}>
+          <Coffee size={30} aria-hidden="true" />
+          <h1>{error ? "โหลดข้อมูลร้านไม่สำเร็จ" : "กำลังโหลดข้อมูลร้าน…"}</h1>
+          <p>{error ? "กรุณาตรวจสอบการเชื่อมต่อ แล้วลองอีกครั้ง" : "กรุณารอสักครู่"}</p>
+          {error && <button className="primary" type="button" onClick={() => void load()}>ลองใหม่</button>}
+        </section>
+      </main>
+    );
+  }
   return (
     <div
       className={
@@ -1943,6 +1978,19 @@ export default function App() {
             >
               <Bell size={16} /> เรียกลูกค้า
             </button>
+          )}
+          {user?.role === "admin" && (
+            <DeleteOrderButton
+              order={o}
+              disabled={busy}
+              onDelete={(order) =>
+                mutate("delete-order", {
+                  id: order.id,
+                  version: order.version,
+                  confirmation: order.number,
+                })
+              }
+            />
           )}
         </div>
       </article>

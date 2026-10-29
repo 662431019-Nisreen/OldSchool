@@ -1369,6 +1369,69 @@ td button,
   color: #af4f3c;
   font-size: 12px;
 }
+.order-delete-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+}
+.order-delete-dialog {
+  margin: auto;
+  width: min(420px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  overflow: auto;
+  padding: 24px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: 0 20px 80px #0003;
+}
+.order-delete-dialog::backdrop {
+  background: #211d1880;
+  backdrop-filter: blur(4px);
+}
+.order-delete-dialog h2 {
+  font-size: 20px;
+  font-weight: 700;
+  margin: 0 0 16px;
+}
+.order-delete-dialog p {
+  font-size: 13px;
+  line-height: 1.7;
+  margin: 12px 0;
+}
+.order-delete-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--cream);
+  padding: 12px;
+  border-radius: 8px;
+  font-size: 14px;
+}
+.order-delete-dialog .order-delete-warning {
+  color: #a23f30;
+}
+.order-delete-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 22px;
+}
+.order-delete-dialog .order-delete-actions button {
+  flex: 1;
+  padding: 11px 14px;
+  font-size: 13px;
+  border-radius: 8px;
+}
+.order-delete-confirm {
+  background: #a23f30;
+  color: white;
+  border-color: #a23f30;
+}
 .empty {
   text-align: center;
   padding: 60px 20px;
@@ -3603,3 +3666,32 @@ td button,
 .report-day-link { background: transparent; color: #64421e; text-decoration: underline; text-underline-offset: 3px; border: 0; padding: 8px 0; white-space: nowrap; }
 .report-daily-panel tfoot { background: #f4eee4; font-weight: 600; }
 .report-daily-panel td, .report-daily-panel th { white-space: nowrap; }
+
+.initial-loading {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--paper);
+}
+.initial-loading-panel {
+  width: min(360px, 100%);
+  text-align: center;
+  color: var(--ink);
+}
+.initial-loading-panel > svg {
+  margin: 0 auto 18px;
+  color: var(--brown);
+}
+.initial-loading-panel h1 {
+  font-size: 20px;
+  font-weight: 700;
+}
+.initial-loading-panel p {
+  color: var(--muted);
+  font-size: 13px;
+  margin: 10px 0 20px;
+}
+.initial-loading-panel button {
+  margin: auto;
+}

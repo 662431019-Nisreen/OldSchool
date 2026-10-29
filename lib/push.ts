@@ -126,7 +126,7 @@ export async function registerOrderPush(guest: string, raw: any, tokens: any) {
     statements.push(
       db
         .prepare(
-          "INSERT OR IGNORE INTO push_order_devices(id,order_id,subscription_id,created) SELECT ?,?,?,? WHERE EXISTS(SELECT 1 FROM subscriptions WHERE id=? AND owner=?)",
+          "INSERT OR IGNORE INTO push_order_devices(id,order_id,subscription_id,created) SELECT ?,?,?,? WHERE EXISTS(SELECT 1 FROM subscriptions WHERE id=? AND owner=?) AND EXISTS(SELECT 1 FROM orders WHERE id=?)",
         )
         .bind(
           o.id + ":" + hash,
@@ -135,6 +135,7 @@ export async function registerOrderPush(guest: string, raw: any, tokens: any) {
           now,
           subscription.endpoint,
           guest,
+          o.id,
         ),
     );
     statements.push(

@@ -81,7 +81,7 @@ export async function processPushEvent(
           hash;
         const inserted = await db
           .prepare(
-            "INSERT OR IGNORE INTO push_deliveries(id,event_id,order_id,device,status,created) VALUES(?,?,?,?,?,?)",
+            "INSERT OR IGNORE INTO push_deliveries(id,event_id,order_id,device,status,created) SELECT ?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM push_events e JOIN orders o ON o.id=e.order_id WHERE e.id=? AND e.order_id=?)",
           )
           .bind(
             deliveryId,
@@ -90,6 +90,8 @@ export async function processPushEvent(
             hash,
             "sending",
             Date.now(),
+            event.id,
+            event.order_id,
           )
           .run();
         if (!inserted.meta.changes) return;

@@ -18,6 +18,12 @@ const json = (data: any, status = 200, headers: Record<string, string> = {}) =>
     status,
     headers: { "Cache-Control": "no-store", ...headers },
   });
+const deletedOrderResponse = () =>
+  json({ error: "ออเดอร์นี้ถูกลบแล้ว กรุณาเริ่มออเดอร์ใหม่" }, 410);
+const retiredOrder = (db: ReturnType<typeof DB>, idem: string) =>
+  db.prepare("SELECT 1 FROM audit WHERE action='retired-order-idem' AND target=? LIMIT 1")
+    .bind(idem)
+    .first();
 const statuses = ["waiting", "making", "ready", "done"];
 export async function GET(r: Request) {
   try {
@@ -218,6 +224,7 @@ export async function POST(r: Request) {
       if (!owner) return json({ error: "กรุณาโหลดหน้าร้านใหม่" }, 400);
       if (typeof b.idem !== "string" || !/^[-a-zA-Z0-9]{20,80}$/.test(b.idem))
         return json({ error: "รหัสคำสั่งไม่ถูกต้อง" }, 400);
+      if (await retiredOrder(db, b.idem)) return deletedOrderResponse();
       const existing = await db
         .prepare("SELECT * FROM orders WHERE idem=? AND owner=?")
         .bind(b.idem, owner)
@@ -238,7 +245,7 @@ export async function POST(r: Request) {
       await db.batch([
         db
           .prepare(
-            "INSERT OR IGNORE INTO orders(token,owner,idem,payload,total,created) VALUES(?,?,?,json_set(?, '$.queueNumber', (SELECT coalesce((SELECT seq FROM sqlite_sequence WHERE name='orders'),0)+1-coalesce((SELECT CAST(value AS INTEGER) FROM config WHERE key='order_queue_offset'),0))),?,?)",
+            "INSERT OR IGNORE INTO orders(token,owner,idem,payload,total,created) SELECT ?,?,?,json_set(?, '$.queueNumber', (SELECT coalesce((SELECT seq FROM sqlite_sequence WHERE name='orders'),0)+1-coalesce((SELECT CAST(value AS INTEGER) FROM config WHERE key='order_queue_offset'),0))),?,? WHERE NOT EXISTS(SELECT 1 FROM audit WHERE action='retired-order-idem' AND target=?)",
           )
           .bind(
             token,
@@ -252,6 +259,7 @@ export async function POST(r: Request) {
             }),
             total,
             new Date().toISOString(),
+            b.idem,
           ),
         newOrderPushStatement(db, token),
       ]);
@@ -259,7 +267,10 @@ export async function POST(r: Request) {
         .prepare("SELECT * FROM orders WHERE idem=? AND owner=?")
         .bind(b.idem, owner)
         .first();
-      if (!o) return json({ error: "ไม่สามารถสร้างออเดอร์" }, 409);
+      if (!o) {
+        if (await retiredOrder(db, b.idem)) return deletedOrderResponse();
+        return json({ error: "ไม่สามารถสร้างออเดอร์" }, 409);
+      }
       return json({ order: publicOrder(o) });
     }
     if (b.action === "track") {
@@ -367,6 +378,7 @@ export async function POST(r: Request) {
       if (!editing) {
         if (typeof b.idem !== "string" || !/^[-a-zA-Z0-9]{20,80}$/.test(b.idem))
           return json({ error: "รหัสคำสั่งไม่ถูกต้อง" }, 400);
+        if (await retiredOrder(db, b.idem)) return deletedOrderResponse();
         const existing = await db
           .prepare("SELECT * FROM orders WHERE idem=? AND owner=?")
           .bind(b.idem, owner)
@@ -507,13 +519,12 @@ export async function POST(r: Request) {
         await db.batch([
           db
             .prepare(
-              "INSERT OR IGNORE INTO orders(token,owner,idem,payload,total,created) VALUES(?,?,?,json_set(?, '$.queueNumber', (SELECT coalesce((SELECT seq FROM sqlite_sequence WHERE name='orders'),0)+1-coalesce((SELECT CAST(value AS INTEGER) FROM config WHERE key='order_queue_offset'),0))),?,?)",
+              "INSERT OR IGNORE INTO orders(token,owner,idem,payload,total,created) SELECT ?,?,?,json_set(?, '$.queueNumber', (SELECT coalesce((SELECT seq FROM sqlite_sequence WHERE name='orders'),0)+1-coalesce((SELECT CAST(value AS INTEGER) FROM config WHERE key='order_queue_offset'),0))),?,? WHERE NOT EXISTS(SELECT 1 FROM audit WHERE action='retired-order-idem' AND target=?)",
             )
-            .bind(token, owner, b.idem, JSON.stringify(payload), total, now),
+            .bind(token, owner, b.idem, JSON.stringify(payload), total, now, b.idem),
           newOrderPushStatement(db, token),
         ]);
       }
-      await log(u.id, b.action, editing ? String(old.id) : b.idem);
       const saved = editing
         ? await db
             .prepare("SELECT * FROM orders WHERE id=?")
@@ -523,7 +534,11 @@ export async function POST(r: Request) {
             .prepare("SELECT * FROM orders WHERE idem=? AND owner=?")
             .bind(b.idem, owner)
             .first();
-      if (!saved) return json({ error: "บันทึกไม่สำเร็จ" }, 409);
+      if (!saved) {
+        if (!editing && await retiredOrder(db, b.idem)) return deletedOrderResponse();
+        return json({ error: "บันทึกไม่สำเร็จ" }, 409);
+      }
+      await log(u.id, b.action, editing ? String(old.id) : b.idem);
       return json({ order: unpack(saved) });
     }
     if (b.action === "status" || b.action === "payment") {
@@ -615,6 +630,58 @@ export async function POST(r: Request) {
       return json({ ok: true, sent: push.accepted, push });
     }
     if (u.role !== "admin") return json({ error: "เฉพาะผู้ดูแลระบบ" }, 403);
+    if (b.action === "delete-order") {
+      if (
+        !Number.isSafeInteger(b.id) || b.id < 1 ||
+        !Number.isSafeInteger(b.version) || b.version < 0
+      )
+        return json({ error: "ข้อมูลออเดอร์ไม่ถูกต้อง" }, 400);
+      const order = await db
+        .prepare("SELECT * FROM orders WHERE id=?")
+        .bind(b.id)
+        .first<any>();
+      if (!order) return json({ error: "ไม่พบออเดอร์" }, 404);
+      if (order.version !== b.version)
+        return json({ error: "ออเดอร์ถูกแก้ไขแล้ว กรุณาปิดแล้วเปิดใหม่" }, 409);
+      const number = unpack(order).number;
+      if (b.confirmation !== number)
+        return json({ error: "กรุณายืนยันหมายเลขออเดอร์ให้ตรงกัน" }, 400);
+      const target = JSON.stringify({
+        id: order.id,
+        number,
+        total: order.total,
+        payment: order.payment,
+        status: order.status,
+      });
+      // A batch is atomic: the audit and deletion use the same version, while
+      // related cleanup only runs once this exact order is no longer present.
+      const result = await db.batch([
+        db.prepare(
+          "INSERT INTO audit(actor,action,target,created) SELECT ?,?,?,? WHERE EXISTS(SELECT 1 FROM orders WHERE id=? AND version=?)",
+        ).bind(u.id, "delete-order", target, new Date().toISOString(), b.id, b.version),
+        db.prepare(
+          "INSERT INTO audit(actor,action,target,created) SELECT ?,?,?,? WHERE EXISTS(SELECT 1 FROM orders WHERE id=? AND version=?)",
+        ).bind(u.id, "retired-order-idem", order.idem, new Date().toISOString(), b.id, b.version),
+        db.prepare("DELETE FROM orders WHERE id=? AND version=?")
+          .bind(b.id, b.version),
+        db.prepare(
+          "DELETE FROM push_deliveries WHERE order_id=? AND NOT EXISTS(SELECT 1 FROM orders WHERE id=?)",
+        ).bind(b.id, b.id),
+        db.prepare(
+          "DELETE FROM push_events WHERE order_id=? AND NOT EXISTS(SELECT 1 FROM orders WHERE id=?)",
+        ).bind(b.id, b.id),
+        db.prepare(
+          "DELETE FROM subscriptions WHERE id IN(SELECT subscription_id FROM push_order_devices WHERE order_id=?) AND NOT EXISTS(SELECT 1 FROM push_order_devices d WHERE d.subscription_id=subscriptions.id AND d.order_id<>?) AND NOT EXISTS(SELECT 1 FROM orders WHERE id=?)",
+        ).bind(b.id, b.id, b.id),
+        db.prepare(
+          "DELETE FROM push_order_devices WHERE order_id=? AND NOT EXISTS(SELECT 1 FROM orders WHERE id=?)",
+        ).bind(b.id, b.id),
+      ]);
+      if (result[2].meta.changes !== 1)
+        return json({ error: "ออเดอร์ถูกแก้ไขหรือลบแล้ว กรุณาโหลดใหม่" }, 409);
+      // Individual deletion never rewinds queue numbers or internal IDs.
+      return json({ ok: true, deleted: 1, id: order.id, number });
+    }
     if (b.action === "reset-orders") {
       if (b.confirmation !== "ล้างออเดอร์ทั้งหมด" ||
           !Number.isSafeInteger(b.cutoff) || b.cutoff < 1)
