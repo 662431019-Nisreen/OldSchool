@@ -135,6 +135,8 @@ export const sweets = [0, 25, 50, 100, 150];
 export const basePrice = (p: Product) =>
   Math.min(...variants(p).map((v) => v.price));
 export function imageFor(p: Product) {
+  // An empty string means the user removed the image; undefined keeps legacy defaults.
+  if (p.image === "") return "";
   if (p.image) return p.image;
   if (p.price != null) return "/assets/logo-coral.png";
   const c = p.category;

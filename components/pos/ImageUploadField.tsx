@@ -1,11 +1,13 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import { X } from "lucide-react";
 
 type Props = {
   value?: string;
   label?: string;
   disabled?: boolean;
   onUploaded: (url: string) => void;
+  onRemove?: () => void;
   onPendingChange?: (pending: boolean) => void;
 };
 
@@ -14,16 +16,18 @@ export default function ImageUploadField({
   label = "รูปสินค้า",
   disabled = false,
   onUploaded,
+  onRemove,
   onPendingChange,
 }: Props) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
   const [uploaded, setUploaded] = useState(false);
+  const [removed, setRemoved] = useState(false);
   const sequence = useRef(0);
   const controller = useRef<AbortController | null>(null);
   const mounted = useRef(true);
-  const callbacks = useRef({ onUploaded, onPendingChange });
-  callbacks.current = { onUploaded, onPendingChange };
+  const callbacks = useRef({ onUploaded, onRemove, onPendingChange });
+  callbacks.current = { onUploaded, onRemove, onPendingChange };
 
   useEffect(() => {
     mounted.current = true;
@@ -43,6 +47,7 @@ export default function ImageUploadField({
     controller.current = null;
     setError("");
     setUploaded(false);
+    setRemoved(false);
     if (
       !["image/jpeg", "image/png", "image/webp"].includes(file.type) ||
       !file.size ||
@@ -104,6 +109,20 @@ export default function ImageUploadField({
     }
   }
 
+  function remove() {
+    if (disabled || !callbacks.current.onRemove) return;
+    // A late upload must never put the removed image back into the draft.
+    sequence.current++;
+    controller.current?.abort();
+    controller.current = null;
+    setPending(false);
+    setError("");
+    setUploaded(false);
+    setRemoved(true);
+    callbacks.current.onPendingChange?.(false);
+    callbacks.current.onRemove();
+  }
+
   return (
     <div className="image-upload-field" aria-busy={pending}>
       <label>
@@ -119,11 +138,43 @@ export default function ImageUploadField({
           }}
         />
       </label>
-      {value && <img className="upload-preview" src={value} alt={label} />}
+      {value && (
+        <div
+          className="image-upload-preview"
+          tabIndex={onRemove && !disabled ? 0 : undefined}
+          onPointerDown={(event) => {
+            if (
+              !onRemove ||
+              disabled ||
+              (event.target as Element).closest("button")
+            )
+              return;
+            if (event.pointerType === "mouse") event.preventDefault();
+            else event.currentTarget.focus({ preventScroll: true });
+          }}
+        >
+          <img className="upload-preview" src={value} alt={label} />
+          {onRemove && (
+            <button
+              type="button"
+              className="image-upload-remove"
+              aria-label={"นำ" + label + "ออก"}
+              title={"นำ" + label + "ออก"}
+              disabled={disabled}
+              onClick={remove}
+            >
+              <X size={16} aria-hidden="true" />
+            </button>
+          )}
+        </div>
+      )}
       <div aria-live="polite">
         {pending && <p role="status">กำลังอัปโหลดรูป… กรุณารอก่อนบันทึก</p>}
         {!pending && uploaded && (
           <p role="status">อัปโหลดแล้ว กดบันทึกเพื่อใช้งาน</p>
+        )}
+        {!pending && removed && !value && (
+          <p role="status">นำรูปออกแล้ว กดบันทึกเพื่อใช้งาน</p>
         )}
       </div>
       {error && (

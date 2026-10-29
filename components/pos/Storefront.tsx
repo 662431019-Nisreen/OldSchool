@@ -130,14 +130,24 @@ export default function Storefront({
     } else goToCategory(name);
   };
   return (
-    <main className="customer-storefront">
-      <div className="customer-cover">
-        <img src={config.cover} alt="ภาพปกร้าน OLD SCHOOL" />
-        <span>COFFEE & GOOD DAYS</span>
-      </div>
+    <main
+      className={"customer-storefront" + (!config.cover ? " no-cover" : "")}
+    >
+      {config.cover && (
+        <div className="customer-cover">
+          <img src={config.cover} alt="ภาพปกร้าน OLD SCHOOL" />
+          <span>COFFEE & GOOD DAYS</span>
+        </div>
+      )}
       <section className="restaurant-profile" aria-label="ข้อมูลร้าน">
         <div className="profile-top">
-          <img className="restaurant-logo" src={config.logo} alt="โลโก้ร้าน" />
+          {config.logo && (
+            <img
+              className="restaurant-logo"
+              src={config.logo}
+              alt="โลโก้ร้าน"
+            />
+          )}
           <span
             className={"availability " + (!config.accepting ? "is-closed" : "")}
           >
@@ -218,13 +228,24 @@ export default function Storefront({
                     aria-label={"เลือก " + p.name}
                   >
                     <div className="product-image">
-                      <img
-                        src={imageFor(p)}
-                        alt={p.name}
-                        width={800}
-                        height={800}
-                        loading="lazy"
-                      />
+                      {imageFor(p) ? (
+                        <img
+                          src={imageFor(p)}
+                          alt={p.name}
+                          width={800}
+                          height={800}
+                          loading="lazy"
+                        />
+                      ) : (
+                        <div
+                          className="product-image-placeholder"
+                          role="img"
+                          aria-label="ยังไม่มีรูปสินค้า"
+                        >
+                          <Coffee size={28} aria-hidden="true" />
+                          <span>ยังไม่มีรูป</span>
+                        </div>
+                      )}
                       {p.soldOut && (
                         <span className="sold-out-label">
                           สินค้าหมดชั่วคราว
@@ -272,7 +293,7 @@ export default function Storefront({
         </div>
       </section>
       <footer className="customer-footer">
-        <img src={config.logo} alt="OLD SCHOOL" />
+        {config.logo && <img src={config.logo} alt="OLD SCHOOL" />}
         <p>ขอบคุณที่ให้เราเป็นส่วนหนึ่งของวันดี ๆ</p>
         <small>รูปเครื่องดื่มเป็นภาพประกอบ</small>
         <button onClick={() => nav("install")}>

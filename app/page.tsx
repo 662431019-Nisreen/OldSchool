@@ -116,6 +116,8 @@ export default function App() {
   const [orderEditor, setOrderEditor] = useState<any>(null);
   const [imageUploading, setImageUploading] = useState(false);
   const imageUploadingRef = useRef(false);
+  const settingsUploads = useRef(new Set<string>());
+  const [settingsUploading, setSettingsUploading] = useState(false);
   const deletedOrderIds = useRef(new Set<number>());
   const bootstrapped = useRef(false);
   const [configConflict, setConfigConflict] = useState("");
@@ -269,7 +271,7 @@ export default function App() {
     if (view === "admin" && user?.role === "admin")
       api("admin")
         .then((d) => {
-          setConfig(d.config);
+          // The menu load already includes the full admin config. Do not overwrite image drafts.
           setUsers(d.users);
         })
         .catch((e) => notify(e.message));
@@ -465,7 +467,7 @@ export default function App() {
             else nav("shop");
           }}
         >
-          <img src={config.logo} alt="OLD SCHOOL" />
+          {config.logo && <img src={config.logo} alt="OLD SCHOOL" />}
           <span>
             {config.name}
             <small>
@@ -1205,6 +1207,7 @@ export default function App() {
                     className="panel form-grid"
                     onSubmit={(e) => {
                       e.preventDefault();
+                      if (busy || settingsUploads.current.size) return;
                       saveConfig(config);
                     }}
                   >
@@ -1254,29 +1257,28 @@ export default function App() {
                       ["cover", "ภาพปกร้าน"],
                       ["bankQr", "QR รับเงินธนาคาร"],
                     ].map(([key, name]) => (
-                      <label key={key}>
-                        {name}
-                        <input
-                          type="file"
-                          accept="image/png,image/jpeg,image/webp"
-                          onChange={async (e) => {
-                            const url = await upload(e.target.files?.[0]);
-                            if (url) setConfig({ ...config, [key]: url });
-                          }}
-                        />
-                        {config[key] && (
-                          <img
-                            className="upload-preview"
-                            src={config[key]}
-                            alt={name}
-                          />
-                        )}
-                      </label>
+                      <ImageUploadField
+                        key={key}
+                        label={name}
+                        value={config[key]}
+                        disabled={busy}
+                        onUploaded={(url) =>
+                          setConfig((current: any) => ({ ...current, [key]: url }))
+                        }
+                        onRemove={() =>
+                          setConfig((current: any) => ({ ...current, [key]: "" }))
+                        }
+                        onPendingChange={(pending) => {
+                          if (pending) settingsUploads.current.add(key);
+                          else settingsUploads.current.delete(key);
+                          setSettingsUploading(settingsUploads.current.size > 0);
+                        }}
+                      />
                     ))}
                     <div className="settings-save-actions">
-                      <button className="primary" disabled={busy}>
+                      <button className="primary" disabled={busy || settingsUploading}>
                         <Check size={16} aria-hidden="true" />
-                        บันทึกการตั้งค่า
+                        {settingsUploading ? "กำลังอัปโหลดรูป…" : "บันทึกการตั้งค่า"}
                       </button>
                     </div>
                     <p className="muted">
@@ -1465,7 +1467,7 @@ export default function App() {
             >
               <X />
             </button>
-            <img src={config.logo} alt="OLD SCHOOL" />
+            {config.logo && <img src={config.logo} alt="OLD SCHOOL" />}
             <h2>{setup ? "ตั้งค่าผู้ดูแลครั้งแรก" : "ยินดีต้อนรับกลับ"}</h2>
             <p className="muted">สำหรับทีมงาน OLD SCHOOL</p>
             {setup ? (
@@ -1685,8 +1687,14 @@ export default function App() {
 
             <ImageUploadField
               key={editing.id}
-              value={editing.image}
+              value={imageFor(editing)}
               disabled={busy}
+              onRemove={() => {
+                const id = editing.id;
+                setEditing((current: any) =>
+                  current?.id === id ? { ...current, image: "" } : current,
+                );
+              }}
               onPendingChange={(pending) => {
                 imageUploadingRef.current = pending;
                 setImageUploading(pending);
@@ -1995,20 +2003,5 @@ export default function App() {
         </div>
       </article>
     );
-  }
-  async function upload(file?: File) {
-    if (!file) return null;
-    try {
-      const f = new FormData();
-      f.set("file", file);
-      const r = await fetch("/api/upload", { method: "POST", body: f });
-      const d: any = await r.json();
-      if (!r.ok) throw new Error(d.error);
-      notify("อัปโหลดแล้ว กดบันทึกเพื่อใช้งาน");
-      return d.url;
-    } catch (e: any) {
-      notify(e.message);
-      return null;
-    }
   }
 }

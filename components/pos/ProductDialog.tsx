@@ -1,6 +1,6 @@
 "use client";
 import type { Dispatch, SetStateAction } from "react";
-import { ShoppingBag, Plus, Minus, X } from "lucide-react";
+import { ShoppingBag, Plus, Minus, X, Coffee } from "lucide-react";
 import { Product, variants, imageFor, sweets } from "@/lib/catalog";
 type Setter<T> = Dispatch<SetStateAction<T>>;
 type Props = {
@@ -50,12 +50,23 @@ export default function ProductDialog({
           <X />
         </button>
         <div className="modal-photo">
-          <img
-            src={imageFor(selected)}
-            alt={selected.name}
-            width={800}
-            height={800}
-          />
+          {imageFor(selected) ? (
+            <img
+              src={imageFor(selected)}
+              alt={selected.name}
+              width={800}
+              height={800}
+            />
+          ) : (
+            <div
+              className="product-image-placeholder"
+              role="img"
+              aria-label="ยังไม่มีรูปสินค้า"
+            >
+              <Coffee size={32} aria-hidden="true" />
+              <span>ยังไม่มีรูป</span>
+            </div>
+          )}
         </div>
         <div className="modal-body">
           <small className="eyebrow">{selected.en}</small>

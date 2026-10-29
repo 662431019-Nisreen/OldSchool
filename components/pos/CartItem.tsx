@@ -1,5 +1,5 @@
 "use client";
-import { Minus, Plus } from "lucide-react";
+import { Minus, Plus, Coffee } from "lucide-react";
 import { imageFor, type Product } from "@/lib/catalog";
 import { money } from "@/lib/client";
 type Props = {
@@ -23,13 +23,20 @@ export default function CartItem({
   onDecrease,
   onIncrease,
 }: Props) {
+  const image = product ? imageFor(product) : "/assets/logo-coral.png";
   return (
     <article className="cart-item cart-item-with-photo" aria-label={line.name}>
-      <img
-        className="cart-item-photo"
-        src={product ? imageFor(product) : "/assets/logo-coral.png"}
-        alt={line.name}
-      />
+      {image ? (
+        <img className="cart-item-photo" src={image} alt={line.name} />
+      ) : (
+        <span
+          className="cart-item-photo product-image-placeholder"
+          role="img"
+          aria-label={"ยังไม่มีรูป " + line.name}
+        >
+          <Coffee size={22} aria-hidden="true" />
+        </span>
+      )}
       <div className="cart-item-info">
         <div className="cart-item-heading">
           <h3>{line.name}</h3>
