@@ -26,7 +26,8 @@ export async function GET(
   try {
     cache = await caches.open("old-school-images-v1");
     const cached = await cache.match(cacheKey);
-    if (cached) return conditional(cached);
+    // Edge-cache headers are immutable; Vinext adds response headers afterward.
+    if (cached) return conditional(new Response(cached.body, cached));
   } catch {
     console.error("image_cache_read_failed");
   }

@@ -31,7 +31,11 @@ export async function GET(r: Request) {
         {
           config: {
             ...config,
-            products: config.products.filter((p: any) => !p.hidden),
+            // Admins must never save a filtered catalog over hidden products.
+            products:
+              u?.role === "admin"
+                ? config.products
+                : config.products.filter((p: any) => !p.hidden),
           },
           user: u,
         },
@@ -673,10 +677,38 @@ export async function POST(r: Request) {
           return json({ error: "ระดับความหวานไม่ถูกต้อง" }, 400);
         ids.add(p.id);
       }
-      await db
-        .prepare("INSERT OR REPLACE INTO config(key,value) VALUES(?,?)")
-        .bind("shop", JSON.stringify(c))
-        .run();
+      const conflict = () =>
+        json(
+          {
+            error:
+              "ข้อมูลร้านเปลี่ยนจากหน้าอื่นแล้ว กรุณาโหลดข้อมูลล่าสุดและตรวจสอบก่อนบันทึกอีกครั้ง",
+          },
+          409,
+        );
+      const current = await db
+        .prepare("SELECT value FROM config WHERE key=?")
+        .bind("shop")
+        .first<{ value: string }>();
+      const revision = current
+        ? (JSON.parse(current.value).revision ?? "legacy")
+        : "initial";
+      if (typeof c.revision !== "string" || c.revision !== revision)
+        return conflict();
+      const value = JSON.stringify({ ...c, revision: crypto.randomUUID() });
+      // Compare the original value inside the write so simultaneous saves cannot
+      // both succeed, including legacy catalogs without a stored revision yet.
+      const saved = current
+        ? await db
+            .prepare("UPDATE config SET value=? WHERE key='shop' AND value=?")
+            .bind(value, current.value)
+            .run()
+        : await db
+            .prepare(
+              "INSERT INTO config(key,value) SELECT 'shop', ? WHERE NOT EXISTS(SELECT 1 FROM config WHERE key='shop')",
+            )
+            .bind(value)
+            .run();
+      if (saved.meta.changes !== 1) return conflict();
       await log(u.id, "config", "shop");
       return json({ ok: true });
     }

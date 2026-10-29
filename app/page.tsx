@@ -1,9 +1,10 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, money, statusNames } from "@/lib/client";
 import { startVisiblePolling } from "@/lib/visible-polling";
 import StaffPushPanel from "@/components/pos/StaffPushPanel";
 import ResetOrders from "@/components/pos/ResetOrders";
+import ImageUploadField from "@/components/pos/ImageUploadField";
 import { useStaffOrderSound } from "@/components/pos/StaffOrderSound";
 import TableContext from "@/components/pos/TableContext";
 import {
@@ -114,6 +115,9 @@ export default function App() {
   const [focusedToken, setFocusedToken] = useState("");
   const [trackingLink, setTrackingLink] = useState("");
   const [orderEditor, setOrderEditor] = useState<any>(null);
+  const [imageUploading, setImageUploading] = useState(false);
+  const imageUploadingRef = useRef(false);
+  const [configConflict, setConfigConflict] = useState("");
   const staffSound = useStaffOrderSound(
     user && (view === "admin" || view === "staff") ? user.id : null,
   );
@@ -366,6 +370,7 @@ export default function App() {
         );
       } else notify("บันทึกเรียบร้อย");
       if (action === "config") {
+        setConfigConflict("");
         await load();
         if (user?.role === "admin") {
           const a = await api("admin");
@@ -377,7 +382,17 @@ export default function App() {
       }
       return true;
     } catch (e: any) {
-      notify(e.message);
+      if (action === "config" && e.status === 409) {
+        let message = e.message;
+        try {
+          const latest = await api("admin");
+          setConfig(latest.config);
+          message =
+            "ข้อมูลร้านเปลี่ยนจากหน้าอื่นแล้ว โหลดข้อมูลล่าสุดให้แล้ว กรุณาตรวจสอบก่อนบันทึกอีกครั้ง";
+        } catch {}
+        setConfigConflict(message);
+        notify(message);
+      } else notify(e.message);
       return false;
     } finally {
       setBusy(false);
@@ -718,6 +733,7 @@ export default function App() {
       )}
       {(view === "staff" || view === "admin") && user && (
         <main className="workspace unified-workspace">
+          {configConflict && <p role="alert">{configConflict}</p>}
           <div className="workspace-heading">
             <div>
               <div className="eyebrow">OLD SCHOOL / WORKSPACE</div>
@@ -1150,90 +1166,90 @@ export default function App() {
               )}
               {adminTab === "settings" && (
                 <>
-                <form
-                  className="panel form-grid"
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    saveConfig(config);
-                  }}
-                >
-                  <h2>ตั้งค่าร้าน</h2>
-                  <label>
-                    ชื่อร้าน
-                    <input
-                      value={config.name}
-                      onChange={(e) =>
-                        setConfig({ ...config, name: e.target.value })
-                      }
-                      required
-                    />
-                  </label>
-                  <label>
-                    เวลาเปิด
-                    <input
-                      type="time"
-                      value={config.open}
-                      onChange={(e) =>
-                        setConfig({ ...config, open: e.target.value })
-                      }
-                    />
-                  </label>
-                  <label>
-                    เวลาปิด
-                    <input
-                      type="time"
-                      value={config.close}
-                      onChange={(e) =>
-                        setConfig({ ...config, close: e.target.value })
-                      }
-                    />
-                  </label>
-                  <label className="check-label">
-                    <input
-                      type="checkbox"
-                      checked={config.accepting}
-                      onChange={(e) =>
-                        setConfig({ ...config, accepting: e.target.checked })
-                      }
-                    />{" "}
-                    เปิดรับออเดอร์
-                  </label>
-                  {[
-                    ["logo", "โลโก้"],
-                    ["cover", "ภาพปกร้าน"],
-                    ["bankQr", "QR รับเงินธนาคาร"],
-                  ].map(([key, name]) => (
-                    <label key={key}>
-                      {name}
+                  <form
+                    className="panel form-grid"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      saveConfig(config);
+                    }}
+                  >
+                    <h2>ตั้งค่าร้าน</h2>
+                    <label>
+                      ชื่อร้าน
                       <input
-                        type="file"
-                        accept="image/png,image/jpeg,image/webp"
-                        onChange={async (e) => {
-                          const url = await upload(e.target.files?.[0]);
-                          if (url) setConfig({ ...config, [key]: url });
-                        }}
+                        value={config.name}
+                        onChange={(e) =>
+                          setConfig({ ...config, name: e.target.value })
+                        }
+                        required
                       />
-                      {config[key] && (
-                        <img
-                          className="upload-preview"
-                          src={config[key]}
-                          alt={name}
-                        />
-                      )}
                     </label>
-                  ))}
-                  <div className="settings-save-actions">
-                    <button className="primary" disabled={busy}>
-                      <Check size={16} aria-hidden="true" />
-                      บันทึกการตั้งค่า
-                    </button>
-                  </div>
-                  <p className="muted">
-                    Push ต้องตั้งค่า VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY และ
-                    VAPID_SUBJECT ฝั่ง Server
-                  </p>
-                </form>
-                <ResetOrders />
+                    <label>
+                      เวลาเปิด
+                      <input
+                        type="time"
+                        value={config.open}
+                        onChange={(e) =>
+                          setConfig({ ...config, open: e.target.value })
+                        }
+                      />
+                    </label>
+                    <label>
+                      เวลาปิด
+                      <input
+                        type="time"
+                        value={config.close}
+                        onChange={(e) =>
+                          setConfig({ ...config, close: e.target.value })
+                        }
+                      />
+                    </label>
+                    <label className="check-label">
+                      <input
+                        type="checkbox"
+                        checked={config.accepting}
+                        onChange={(e) =>
+                          setConfig({ ...config, accepting: e.target.checked })
+                        }
+                      />{" "}
+                      เปิดรับออเดอร์
+                    </label>
+                    {[
+                      ["logo", "โลโก้"],
+                      ["cover", "ภาพปกร้าน"],
+                      ["bankQr", "QR รับเงินธนาคาร"],
+                    ].map(([key, name]) => (
+                      <label key={key}>
+                        {name}
+                        <input
+                          type="file"
+                          accept="image/png,image/jpeg,image/webp"
+                          onChange={async (e) => {
+                            const url = await upload(e.target.files?.[0]);
+                            if (url) setConfig({ ...config, [key]: url });
+                          }}
+                        />
+                        {config[key] && (
+                          <img
+                            className="upload-preview"
+                            src={config[key]}
+                            alt={name}
+                          />
+                        )}
+                      </label>
+                    ))}
+                    <div className="settings-save-actions">
+                      <button className="primary" disabled={busy}>
+                        <Check size={16} aria-hidden="true" />
+                        บันทึกการตั้งค่า
+                      </button>
+                    </div>
+                    <p className="muted">
+                      Push ต้องตั้งค่า VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY และ
+                      VAPID_SUBJECT ฝั่ง Server
+                    </p>
+                  </form>
+                  <ResetOrders />
                 </>
               )}
             </>
@@ -1462,6 +1478,7 @@ export default function App() {
             onClick={(e) => e.stopPropagation()}
             onSubmit={async (e) => {
               e.preventDefault();
+              if (busy || imageUploadingRef.current) return;
               const exists = products.some((p) => p.id === editing.id);
               if (
                 await saveConfig({
@@ -1484,6 +1501,7 @@ export default function App() {
                 <X />
               </button>
             </div>
+            {configConflict && <p role="alert">{configConflict}</p>}
             <label>
               ชื่อไทย
               <input
@@ -1630,17 +1648,21 @@ export default function App() {
               </>
             )}
 
-            <label>
-              รูปสินค้า
-              <input
-                type="file"
-                accept="image/png,image/jpeg,image/webp"
-                onChange={async (e) => {
-                  const url = await upload(e.target.files?.[0]);
-                  if (url) setEditing({ ...editing, image: url });
-                }}
-              />
-            </label>
+            <ImageUploadField
+              key={editing.id}
+              value={editing.image}
+              disabled={busy}
+              onPendingChange={(pending) => {
+                imageUploadingRef.current = pending;
+                setImageUploading(pending);
+              }}
+              onUploaded={(url) => {
+                const id = editing.id;
+                setEditing((current: any) =>
+                  current?.id === id ? { ...current, image: url } : current,
+                );
+              }}
+            />
             <label className="check-label">
               <input
                 type="checkbox"
@@ -1720,8 +1742,8 @@ export default function App() {
               >
                 ลบเมนู
               </button>
-              <button className="primary" disabled={busy}>
-                บันทึกเมนู
+              <button className="primary" disabled={busy || imageUploading}>
+                {imageUploading ? "กำลังอัปโหลดรูป…" : "บันทึกเมนู"}
               </button>
             </div>
           </form>

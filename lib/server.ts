@@ -22,21 +22,24 @@ export async function getConfig() {
     .prepare("SELECT value FROM config WHERE key=?")
     .bind("shop")
     .first<{ value: string }>();
-  return row
-    ? JSON.parse(row.value)
-    : {
-        name: "OLD SCHOOL",
-        subtitle: "Coffee & Good Days",
-        open: "08:00",
-        close: "18:00",
-        tables: 12,
-        categories: categories.slice(1),
-        products: initialProducts,
-        bankQr: "",
-        logo: "/assets/logo-coral.png",
-        cover: "/assets/hero.jpg",
-        accepting: true,
-      };
+  if (row) {
+    const config = JSON.parse(row.value);
+    return { ...config, revision: config.revision ?? "legacy" };
+  }
+  return {
+    revision: "initial",
+    name: "OLD SCHOOL",
+    subtitle: "Coffee & Good Days",
+    open: "08:00",
+    close: "18:00",
+    tables: 12,
+    categories: categories.slice(1),
+    products: initialProducts,
+    bankQr: "",
+    logo: "/assets/logo-coral.png",
+    cover: "/assets/hero.jpg",
+    accepting: true,
+  };
 }
 export async function hash(password: string, salt: string) {
   const key = await crypto.subtle.importKey(

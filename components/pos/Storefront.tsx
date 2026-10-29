@@ -218,7 +218,13 @@ export default function Storefront({
                     aria-label={"เลือก " + p.name}
                   >
                     <div className="product-image">
-                      <img src={imageFor(p)} alt={p.name} loading="lazy" />
+                      <img
+                        src={imageFor(p)}
+                        alt={p.name}
+                        width={800}
+                        height={800}
+                        loading="lazy"
+                      />
                       {p.soldOut && (
                         <span className="sold-out-label">
                           สินค้าหมดชั่วคราว

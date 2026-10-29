@@ -50,7 +50,12 @@ export default function ProductDialog({
           <X />
         </button>
         <div className="modal-photo">
-          <img src={imageFor(selected)} alt={selected.name} />
+          <img
+            src={imageFor(selected)}
+            alt={selected.name}
+            width={800}
+            height={800}
+          />
         </div>
         <div className="modal-body">
           <small className="eyebrow">{selected.en}</small>

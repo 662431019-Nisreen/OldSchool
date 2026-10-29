@@ -19,6 +19,9 @@ export async function api(action: string, body?: any, signal?: AbortSignal) {
       : { cache: "no-store", signal },
   );
   const d: any = await r.json();
-  if (!r.ok) throw new Error(d.error || "เกิดข้อผิดพลาด");
+  if (!r.ok)
+    throw Object.assign(new Error(d.error || "เกิดข้อผิดพลาด"), {
+      status: r.status,
+    });
   return d;
 }
